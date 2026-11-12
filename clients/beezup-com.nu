@@ -12,28 +12,37 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {Ocp-Apim-Subscription-Key: $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "ocp-apim-subscription-key" => { {scheme: $scheme, headers: {"Ocp-Apim-Subscription-Key": $token_val}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -41,8 +50,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -53,7 +67,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -61,9 +84,11 @@ def encode-path-array [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -86,14 +111,40 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # HEAD — bodyless; default surfaces just the headers on success
 def send-head [req: record, insecure: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  let resp = (http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url)
+  let resp = http head --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure $req.url
   if (not $full) and (not $allow_errors) and (status-ok $resp.status $ok_codes) { return $resp.headers }
   $resp | handle-response $allow_errors $full $ok_codes
 }
@@ -127,6 +178,10 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 # Completers for enum parameters
 def date-search-type-completer [] { ["MarketPlaceModification" "Modification" "Purchase"] }
+def action-name-completer [] { ["disable" "reenable"] }
+def period-type-completer [] { ["Custom" "Last30Days" "Last3Months" "Last60Days" "Last7Days" "Last90Days" "LastMonth" "LastWeek" "ThisMonth" "Yesterday"] }
+def order-by-completer [] { ["ClickCount" "Cost" "DisabledProductCount" "EnabledProductCount" "Margin" "OrderCount" "PerformanceIndicator" "ProductCount" "ROI" "SoldProductCount" "TotalSales"] }
+def order-by-direction-completer [] { ["Ascending" "Descending"] }
 def product-state-completer [] { ["All" "Disabled" "Enabled"] }
 def report-type-completer [] { ["ByCategory" "ByChannel" "ByDay" "ByProduct"] }
 def optimisation-action-name-completer [] { ["disable" "reenable"] }
@@ -136,13 +191,14 @@ def profile-picture-selected-completer [] { ["gravatar" "initials" "uploaded"] }
 def feed-type-completer [] { ["Images" "Inventory" "Offers" "Pricing" "Products" "Relationships" "Unpublish"] }
 def publication-strategy-kind-completer [] { ["Delta" "Full"] }
 def format-completer-1 [] { ["csv"] }
+def accept-completer [] { ["application/json" "application/pdf"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "change-order-list-v3" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["change-order-list-v3" "change-order-list-v2" "clear-merchant-order-info-list-v3" "set-merchant-order-info-list-v3" "harvest-all-v3" "get-order-list-full-v3" "get-order-list-light-v3" "get-order-management-ready-marketplace-business-code" "get-marketplace-accounts-synchronization-v3" "harvest-account" "get-order-v3" "head-order-v3" "clear-merchant-order-info-v3" "harvest-order-v3" "get-order-history-v3" "get-order-change-reporting-v3" "set-merchant-order-info-v3" "change-order-v3" "get-channels-index" "get-channels" "get-public-lov-index" "get-public-list-of-values" "login" "lost-password" "register" "analytics-index" "get-store-report-by-day-per-store" "get-tracking-status" "analytics-store-index" "optimise-all" "optimise-by-category" "optimise-by-channel" "optimise-by-product" "copy-optimisation" "optimise" "get-store-report-by-category" "get-store-report-by-channel" "get-store-report-by-day" "get-store-report-by-product" "get-report-filters" "delete-report-filter" "get-report-filter" "save-report-filter" "get-rules" "create-rule" "get-rules-executions" "run-rules" "delete-rule" "get-rule" "update-rule" "disable-rule" "enable-rule" "move-down-rule" "move-up-rule" "run-rule" "get-store-tracked-clicks" "get-store-tracked-external-orders" "get-store-tracked-orders" "get-store-tracking-status" "catalog-index" "catalog-get-beez-up-columns" "importation-get-reportings-all-stores" "catalog-store-index" "auto-delete-auto-import" "auto-get-auto-import-configuration" "importation-activate-auto-import" "auto-pause-auto-import" "auto-resume-auto-import" "auto-configure-auto-import-interval" "auto-schedule-auto-import" "auto-start-auto-import" "catalog-get-catalog-columns" "catalog-change-catalog-column-user-name" "catalog-get-categories" "catalog-get-custom-columns" "catalog-compute-expression" "catalog-delete-custom-column" "catalog-save-custom-column" "catalog-get-custom-column-expression" "catalog-change-custom-column-expression" "catalog-change-custom-column-user-name" "importation-get-reportings" "importation-start-manual-update" "importation-get-importation-monitoring" "importation-cancel" "importation-get-detected-catalog-columns" "importation-configure-catalog-column" "importation-ignore-column" "importation-map-catalog-column" "importation-reattend-column" "importation-unmap-catalog-column" "importation-commit" "importation-commit-columns" "importation-configure-remaining-catalog-columns" "importation-get-custom-columns" "importation-delete-custom-column" "importation-save-custom-column" "importation-get-custom-column-expression" "importation-map-custom-column" "importation-unmap-custom-column" "importation-get-product-sample" "importation-get-product-sample-custom-column-value" "importation-get-products-report" "importation-get-report" "importation-technical-progression" "importation-get-manual-update-last-input-config" "catalog-get-product-by-sku" "catalog-get-products" "catalog-get-random-products" "catalog-get-product-by-product-id" "get-channel-catalogs" "add-channel-catalog" "get-channel-catalog-filter-operators" "get-channel-catalog-product-by-channel-catalog" "delete-channel-catalog" "get-channel-catalog" "get-channel-catalog-categories" "configure-channel-catalog-category" "disable-channel-catalog-category-mapping" "reenable-channel-catalog-category-mapping" "configure-channel-catalog-column-mappings" "disable-channel-catalog" "enable-channel-catalog" "get-channel-catalog-exclusion-filters" "configure-channel-catalog-exclusion-filters" "get-channel-catalog-exportation-cache-info" "clear-channel-catalog-exportation-cache" "get-channel-catalog-exportation-history" "get-channel-catalog-product-info-list" "get-channel-catalog-products-counters" "export-channel-catalog-product-info-list" "get-channel-catalog-product-info" "disable-channel-catalog-product" "override-channel-catalog-product-values" "get-channel-catalog-product-value-override-copy" "configure-channel-catalog-product-value-override-copy" "delete-channel-catalog-product-value-override" "reenable-channel-catalog-product" "configure-channel-catalog-cost-settings" "configure-channel-catalog-general-settings" "get-available-channels" "get-channel-info" "get-channel-categories" "get-channel-columns" "get-customer-index" "get-user-account-info" "activate-user-account" "change-email" "change-password" "save-company-info" "get-credit-card-info" "save-credit-card-info" "save-personal-info" "get-profile-picture-info" "save-profile-picture-info" "resend-email-activation" "get-billing-periods" "get-contracts" "create-contract" "terminate-current-contract" "reactivate-current-contract" "delete-next-contract" "get-friend-info" "get-invoices" "get-standard-offers" "get-offer" "logout" "get-stores" "create-store" "delete-store" "get-store" "update-store" "get-store-alerts" "save-store-alerts" "get-rights" "get-store-shares" "share-store" "delete-store-share" "zendesk-token" "get-legacy-tracking-channel-catalogs" "get-legacy-tracking-channel-catalog" "migrate-legacy-tracking-channel-catalog" "get-user-lov-index" "get-user-list-of-values" "get-marketplace-channel-catalogs" "get-publications" "publish-catalog-to-marketplace" "get-channel-catalog-marketplace-properties" "get-channel-catalog-marketplace-settings" "set-channel-catalog-marketplace-settings" "get-order-index" "get-automatic-transitions" "configure-automatic-transitions" "change-order-list" "clear-merchant-order-info-list" "set-merchant-order-info-list" "get-order-exportations" "export-orders" "harvest-all" "generate-batch-order-invoice" "get-order-invoice-pdf" "get-order-invoice-design-settings" "save-order-invoice-design-settings" "get-order-invoice-design-settings-preview" "get-order-invoice-general-settings" "save-order-invoice-general-settings" "generate-order-invoice" "get-order-invoice-preview" "get-order-list-full" "get-order-list-light" "get-marketplace-accounts-synchronization" "get-subscription-list" "delete-subscription" "get-subscription" "create-subscription" "activate-subscription" "deactivate-subscription" "get-subscription-push-reporting" "retry-push-orders" "get-order" "head-order" "clear-merchant-order-info" "harvest-order" "get-order-history" "set-merchant-order-info" "change-order" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -164,7 +220,6 @@ export def commands []: nothing -> table {
 #
 # POST /orders/v3/batches/changeOrders
 # operationId: ChangeOrderListV3
-# --changeOrders item shape: {changeOrderRequest?: record, order: any}
 export def "change-order-list-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,19 +230,20 @@ export def "change-order-list-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login. (required)
   --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  change_orders: list # The change order operations — item shape: {changeOrderRequest?: record, order: any}
-]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
+  change_orders: list # The change order operations — item shape: {changeOrderRequest?: record, order: record}
+]: any -> oneof<record<operations: table<errors: list, order: record, status: int, success: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/batches/changeOrders" $qp $auth.query)
   let req_body = {"changeOrders": $change_orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -206,7 +262,6 @@ export def "change-order-list-v3" [
 #
 # POST /orders/v3/batches/changeOrders/{changeOrderType}
 # operationId: ChangeOrderListV2
-# --changeOrders item shape: {changeOrderRequest?: record, order: record}
 export def "change-order-list-v2" [
   change_order_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,20 +273,21 @@ export def "change-order-list-v2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login. (required)
   --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
   change_orders: list # The change order operations — item shape: {changeOrderRequest?: record, order: record}
-]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
+]: any -> oneof<record<operations: table<errors: list, order: record, status: int, success: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($change_order_type | is-empty) { error make --unspanned { msg: "path parameter 'changeOrderType' must be non-empty" } }
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({change_order_type: (encode-path-segment $change_order_type)} | format pattern "/orders/v3/batches/changeOrders/{change_order_type}") $qp $auth.query)
   let req_body = {"changeOrders": $change_orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -250,7 +306,6 @@ export def "change-order-list-v2" [
 #
 # POST /orders/v3/batches/clearMerchantOrderInfos
 # operationId: ClearMerchantOrderInfoListV3
-# --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
 export def "clear-merchant-order-info-list-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,16 +318,16 @@ export def "clear-merchant-order-info-list-v3" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
   orders: list # e.g. [{accountId: 1234, beezUPOrderId: 0, marketplaceTechnicalCode: Amazon}, {accountId: 5678, beezUPOrderId: 0, marketplaceTechnicalCode: Amazon}, {accountId: 9876, beezUPOrderId: 0, marketplaceTechnicalCode: Ebay}] — item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
-]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
+]: any -> oneof<record<operations: table<errors: list, order: record, status: int, success: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/batches/clearMerchantOrderInfos" $qp $auth.query)
   let req_body = {"orders": $orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -291,7 +346,6 @@ export def "clear-merchant-order-info-list-v3" [
 #
 # POST /orders/v3/batches/setMerchantOrderInfos
 # operationId: SetMerchantOrderInfoListV3
-# --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
 export def "set-merchant-order-info-list-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -306,16 +360,16 @@ export def "set-merchant-order-info-list-v3" [
   order_merchant_e_commerce_software_name: string # The e-commerce software name of the merchant (e.g. Prestashop)
   order_merchant_e_commerce_software_version: string # The e-commece software version of the merchant (e.g. 123.0.1)
   orders: list # e.g. [{accountId: 1234, beezUPOrderId: 8D47FF1427A26B064ca98e95f644361ada5a5be0bbb3b53, marketplaceTechnicalCode: Amazon, order_MerchantOrderId: BX1234}, {accountId: 5678, beezUPOrderId: 8D47FF149F213D055f26e3c413e4c9ba5c5cfda460547a4, marketplaceTechnicalCode: Amazon, order_MerchantOrderId: BX5678}, {accountId: 9876, beezUPOrderId: 8D47FF150217B60bdec05ab61c445d1a59e3da050b52823, marketplaceTechnicalCode: Ebay, order_MerchantOrderId: BX9876}] — item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
-]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
+]: any -> oneof<record<operations: table<errors: list, order: record, status: int, success: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/batches/setMerchantOrderInfos" $qp $auth.query)
   let req_body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "orders": $orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -351,7 +405,7 @@ export def "harvest-all-v3" [
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/harvest" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -380,7 +434,7 @@ export def "get-order-list-full-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
+  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size (required)
   --account-ids: list<int> # Account Id list (e.g. [12345])
   --beez-up-order-statuses: list<string> # e.g. [InProgress]
   begin_period_utc_date: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period. (format: date-time, e.g. 2017-03-01T13:10:01Z)
@@ -396,17 +450,18 @@ export def "get-order-list-full-v3" [
   --store-ids: list<string> # Store Id list
   page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
   page_size: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
-]: any -> record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<links: record, transitionLinks: list>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+]: any -> oneof<record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool, orderItems: list, order_Buyer_AddressCity: string, order_Buyer_AddressCountryIsoCodeAlpha2: string, order_Buyer_AddressCountryName: string, order_Buyer_AddressLine1: string, order_Buyer_AddressLine2: string, order_Buyer_AddressLine3: string, order_Buyer_AddressPostalCode: string, order_Buyer_AddressStateOrRegion: string, order_Buyer_Civility: string, order_Buyer_CompanyName: string, order_Buyer_Email: string, order_Buyer_FirstName: string, order_Buyer_Identifier: string, order_Buyer_LastName: string, order_Buyer_MobilePhone: string, order_Buyer_Phone: string, order_Comment: string, order_FulfilledBy: string, order_IsBusiness: bool, order_IsPrime: bool, order_MarketPlaceChannel: string, order_OrderItemsSourceUri: string, order_OrderSourceUri: string, order_PayingUtcDate: string, order_PaymentMethod: string, order_Shipping_AddressCity: string, order_Shipping_AddressCountryIsoCodeAlpha2: string, order_Shipping_AddressCountryName: string, order_Shipping_AddressLine1: string, order_Shipping_AddressLine2: string, order_Shipping_AddressLine3: string, order_Shipping_AddressName: string, order_Shipping_AddressPostalCode: string, order_Shipping_AddressStateOrRegion: string, order_Shipping_Civility: string, order_Shipping_CompanyName: string, order_Shipping_EarliestShipUtcDate: string, order_Shipping_Email: string, order_Shipping_FirstName: string, order_Shipping_LastName: string, order_Shipping_LatestShipUtcDate: string, order_Shipping_Method: string, order_Shipping_MobilePhone: string, order_Shipping_Phone: string, order_Shipping_Price: float, order_Shipping_ShippingTax: float, order_TotalCommission: float, order_TotalTax: float, transitionLinks: list>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_encoding == null) { error make --unspanned { msg: "required header parameter 'Accept-Encoding' missing: pass --accept-encoding" } }
   let full_url = (build-url $base "/orders/v3/list/full" $auth.query)
   let req_body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -450,15 +505,15 @@ export def "get-order-list-light-v3" [
   --store-ids: list<string> # Store Id list
   page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
   page_size: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
-]: any -> record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+]: any -> oneof<record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/orders/v3/list/light" $auth.query)
   let req_body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -489,15 +544,15 @@ export def "get-order-management-ready-marketplace-business-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-ids: list<string> # StoredIds to filter
   --accept-language: list<string> # Indicates that the client accepts the following languages.
-]: nothing -> table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string> {
+]: nothing -> oneof<table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeIds" $store_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/lov/orderManagementReadyMarketplaceBusinessCode" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | each { into string } | str join "," } else { $accept_language })} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | compact | each { into string } | str join "," } else { $accept_language })} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -528,15 +583,15 @@ export def "get-marketplace-accounts-synchronization-v3" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-ids: list<string> # StoredIds to filter
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<accountSynchronizations: table<accountId: int, completedHarvestSynchroUtcDate: string, marketplaceBusinessCode: string, marketplaceTechnicalCode: string>> {
+]: nothing -> oneof<record<accountSynchronizations: table<accountId: int, completedHarvestSynchroUtcDate: string, marketplaceBusinessCode: string, marketplaceTechnicalCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeIds" $store_ids "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/orders/v3/status" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -577,7 +632,7 @@ export def "harvest-account" [
   let qp = [(serialize-qp "marketplaceOrderId" $marketplace_order_id "scalar") (serialize-qp "beezUPOrderId" $beez_up_order_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/harvest") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -610,7 +665,7 @@ export def "get-order-v3" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, transitionLinks: table<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool, rel: string>> {
+]: nothing -> oneof<record<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool, orderItems: table<beezUPOrderItemId: string, orderItem_BeezUPStoreId: string, orderItem_Condition: string, orderItem_ImageUrl: string, orderItem_ItemPrice: float, orderItem_ItemTax: float, orderItem_MarketPlaceProductId: string, orderItem_MarketplaceImageUri: string, orderItem_MarketplaceProductUri: string, orderItem_MerchantImportedProductId: string, orderItem_MerchantImportedProductIdColumnName: string, orderItem_MerchantImportedProductUrl: string, orderItem_MerchantProductId: string, orderItem_MerchantProductIdColumnName: string, orderItem_OrderItemType: string, orderItem_Quantity: float, orderItem_Shipping_Price: float, orderItem_Title: string, orderItem_TotalPrice: float, orderItem_gtin: string>, order_Buyer_AddressCity: string, order_Buyer_AddressCountryIsoCodeAlpha2: string, order_Buyer_AddressCountryName: string, order_Buyer_AddressLine1: string, order_Buyer_AddressLine2: string, order_Buyer_AddressLine3: string, order_Buyer_AddressPostalCode: string, order_Buyer_AddressStateOrRegion: string, order_Buyer_Civility: string, order_Buyer_CompanyName: string, order_Buyer_Email: string, order_Buyer_FirstName: string, order_Buyer_Identifier: string, order_Buyer_LastName: string, order_Buyer_MobilePhone: string, order_Buyer_Phone: string, order_Comment: string, order_FulfilledBy: string, order_IsBusiness: bool, order_IsPrime: bool, order_MarketPlaceChannel: string, order_OrderItemsSourceUri: string, order_OrderSourceUri: string, order_PayingUtcDate: string, order_PaymentMethod: string, order_Shipping_AddressCity: string, order_Shipping_AddressCountryIsoCodeAlpha2: string, order_Shipping_AddressCountryName: string, order_Shipping_AddressLine1: string, order_Shipping_AddressLine2: string, order_Shipping_AddressLine3: string, order_Shipping_AddressName: string, order_Shipping_AddressPostalCode: string, order_Shipping_AddressStateOrRegion: string, order_Shipping_Civility: string, order_Shipping_CompanyName: string, order_Shipping_EarliestShipUtcDate: string, order_Shipping_Email: string, order_Shipping_FirstName: string, order_Shipping_LastName: string, order_Shipping_LatestShipUtcDate: string, order_Shipping_Method: string, order_Shipping_MobilePhone: string, order_Shipping_Phone: string, order_Shipping_Price: float, order_Shipping_ShippingTax: float, order_TotalCommission: float, order_TotalTax: float, transitionLinks: table<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
@@ -618,9 +673,9 @@ export def "get-order-v3" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -653,7 +708,7 @@ export def "head-order-v3" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
@@ -661,9 +716,9 @@ export def "head-order-v3" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "head"
     url: $full_url
@@ -705,7 +760,7 @@ export def "clear-merchant-order-info-v3" [
   let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/clearMerchantOrderInfo") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -745,7 +800,7 @@ export def "harvest-order-v3" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/harvest") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -777,7 +832,7 @@ export def "get-order-history-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<changeOrderReportings: table<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool>, harvestOrderReportings: table<beezUPForcedStatus: string, beezUPStatus: string, creationUtcDate: string, errorMessage: string, executionUUID: string, lastUpdateUtcDate: string, marketplaceStatus: string, processingStatus: string, warningMessage: string>, lastModificationUtcDate: string> {
+]: nothing -> oneof<record<changeOrderReportings: table<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool>, harvestOrderReportings: table<beezUPForcedStatus: string, beezUPStatus: string, creationUtcDate: string, errorMessage: string, executionUUID: string, lastUpdateUtcDate: string, marketplaceStatus: string, processingStatus: string, warningMessage: string>, lastModificationUtcDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
@@ -785,7 +840,7 @@ export def "get-order-history-v3" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -818,7 +873,7 @@ export def "get-order-change-reporting-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool> {
+]: nothing -> oneof<record<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
@@ -827,7 +882,7 @@ export def "get-order-change-reporting-v3" [
   if ($order_change_execution_uuid | is-empty) { error make --unspanned { msg: "path parameter 'orderChangeExecutionUUID' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), order_change_execution_uuid: (encode-path-segment $order_change_execution_uuid)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history/{order_change_execution_uuid}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -873,9 +928,9 @@ export def "set-merchant-order-info-v3" [
   let qp = [(serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/setMerchantOrderInfo") $qp $auth.query)
   let req_body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "order_MerchantOrderId": $order_merchant_order_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -908,7 +963,7 @@ export def "change-order-v3" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login. (required)
   --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
   --body: record
 ]: any -> any {
@@ -919,12 +974,13 @@ export def "change-order-v3" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   if ($change_order_type | is-empty) { error make --unspanned { msg: "path parameter 'changeOrderType' must be non-empty" } }
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), change_order_type: (encode-path-segment $change_order_type)} | format pattern "/orders/v3/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/{change_order_type}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -954,14 +1010,14 @@ export def "get-channels-index" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<channels: record, links: record<channelCountryLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, channelTypeLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, sectorLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<channels: record, links: record<channelCountryLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, channelTypeLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, sectorLov: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/channels/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -991,17 +1047,18 @@ export def "get-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-encoding: list<string> # Allows the client to indicate whether it accepts a compressed encoding to reduce traffic size.
+  --accept-encoding: list<string> # Allows the client to indicate whether it accepts a compressed encoding to reduce traffic size. (required)
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<channels: table<homeUrl: string, logoUrl: string, name: string, sectors: list, types: list>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<channels: table<homeUrl: string, logoUrl: string, name: string, sectors: list, types: list>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($country_iso_code | is-empty) { error make --unspanned { msg: "path parameter 'countryIsoCode' must be non-empty" } }
+  if ($accept_encoding == null) { error make --unspanned { msg: "required header parameter 'Accept-Encoding' missing: pass --accept-encoding" } }
   let full_url = (build-url $base ({country_iso_code: (encode-path-segment $country_iso_code)} | format pattern "/v2/public/channels/{country_iso_code}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding }), "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | compact | each { into string } | str join "," } else { $accept_encoding }), "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1031,14 +1088,14 @@ export def "get-public-lov-index" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<links: record<lists: record, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<links: record<lists: record, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/lov/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1070,15 +1127,15 @@ export def "get-public-list-of-values" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: list<string> # Indicates that the client accepts the following languages.
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<items: table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<items: table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_name | is-empty) { error make --unspanned { msg: "path parameter 'listName' must be non-empty" } }
   let full_url = (build-url $base ({list_name: (encode-path-segment $list_name)} | format pattern "/v2/public/lov/{list_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | each { into string } | str join "," } else { $accept_language }), "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | compact | each { into string } | str join "," } else { $accept_language }), "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1109,15 +1166,15 @@ export def "login" [
   --dry-run(-n) # Return the request that would be sent without executing it
   login: string # The email (format: email, e.g. paulsimon@mysupercompany.com)
   password: string # Your password (format: password, e.g. I@mW0nder$Full)
-]: any -> record<credentials: table<primaryToken: string, productName: string, secondaryToken: string>> {
+]: any -> oneof<record<credentials: table<primaryToken: string, productName: string, secondaryToken: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/security/login" $auth.query)
   let req_body = {"login": $login, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1153,9 +1210,9 @@ export def "lost-password" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/security/lostpassword" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1194,9 +1251,9 @@ export def "register" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/public/security/register" $auth.query)
   let req_body = {"commercialOwnerUserId": $commercial_owner_user_id, "cultureName": $culture_name, "email": $email, "password": $password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1225,12 +1282,12 @@ export def "analytics-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackingStatus: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<analyticsNumericalProductColumnFilterOperatorNameLov: record<href: string, method: string>, analyticsProductColumnFilterOperatorNameLov: record<href: string, method: string>, analyticsStringProductColumnFilterOperatorNameLov: record<href: string, method: string>, performanceIndicatorFilterOperatorNameLov: record<href: string, method: string>, performanceIndicatorFormulaOperatorNameLov: record<href: string, method: string>, performanceIndicatorFormulaParameterTypeLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByCategoryLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByChannelLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByProductLov: record<href: string, method: string>, performanceIndicatorTypeLov: record<href: string, method: string>, storeOptimisationRuleExecutionStatusLov: record<href: string, method: string>>, stores: table<links: record>> {
+]: nothing -> oneof<record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackingStatus: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<analyticsNumericalProductColumnFilterOperatorNameLov: record<href: string, method: string>, analyticsProductColumnFilterOperatorNameLov: record<href: string, method: string>, analyticsStringProductColumnFilterOperatorNameLov: record<href: string, method: string>, performanceIndicatorFilterOperatorNameLov: record<href: string, method: string>, performanceIndicatorFormulaOperatorNameLov: record<href: string, method: string>, performanceIndicatorFormulaParameterTypeLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByCategoryLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByChannelLov: record<href: string, method: string>, performanceIndicatorTypeForReportsByProductLov: record<href: string, method: string>, performanceIndicatorTypeLov: record<href: string, method: string>, storeOptimisationRuleExecutionStatusLov: record<href: string, method: string>>, stores: table<links: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/analytics/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1249,7 +1306,6 @@ export def "analytics-index" [
 #
 # POST /v2/user/analytics/reports/byday
 # operationId: GetStoreReportByDayPerStore
-# --advancedFilters shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
 export def "get-store-report-by-day-per-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1266,15 +1322,15 @@ export def "get-store-report-by-day-per-store" [
   --channel-ids: list<string> # Indicate the channel identifier list (e.g. [2dc136a7-0d3d-4cc9-a825-a28a42c53e28])
   end_period_utc_date: string # The end date of the period for the report (format: date, e.g. 2006-12-20T00:00:00Z)
   --product-id: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
-]: any -> record {
+]: any -> oneof<record, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/analytics/reports/byday" $auth.query)
   let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "catalogCategoryId": $catalog_category_id, "channelIds": $channel_ids, "endPeriodUtcDate": $end_period_utc_date, "productId": $product_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1303,12 +1359,12 @@ export def "get-tracking-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clickSynchronizationUtcDate: string, marketplaceOrderSynchonizationUtcDate: string, orderSynchonizationUtcDate: string> {
+]: nothing -> oneof<record<clickSynchronizationUtcDate: string, marketplaceOrderSynchonizationUtcDate: string, orderSynchonizationUtcDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/analytics/tracking/status" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1338,13 +1394,13 @@ export def "analytics-store-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<optimise: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseAll: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByCategory: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByChannel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByProduct: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByCategory: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByChannel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByDay: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByProduct: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportFilters: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, rules: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedClicks: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedExternalOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackingStatus: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<links: record<optimise: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseAll: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByCategory: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByChannel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, optimiseByProduct: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByCategory: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByChannel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByDay: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportByProduct: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportFilters: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, rules: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedClicks: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedExternalOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackedOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, trackingStatus: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1363,10 +1419,9 @@ export def "analytics-store-index" [
 #
 # POST /v2/user/analytics/{storeId}/optimisations/all/{actionName}
 # operationId: OptimiseAll
-# --analyticsProductColumnFilters shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
 export def "optimise-all" [
   store_id: string
-  action_name: string
+  action_name: string@action-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,6 +1431,15 @@ export def "optimise-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  advanced_filters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
+  begin_period_utc_date: string # The begin date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-11-20T00:00:00Z)
+  --category-filter: record # shape: {categoryPath?: list<string>}
+  --channel-id: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
+  end_period_utc_date: string # The end date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-12-20T00:00:00Z)
+  --performance-indicator-filters: list # e.g. [{indicator: Cost, operatorName: Equals, value: 10}] — item shape: {operatorName: string, performanceIndicator: "ClickCount"|"Cost"|"OrderCount"|"ProductCount"|"SoldProductCount"|"DisabledProductCount"|"EnabledProductCount"|"TotalSales"|"Margin"|"ROI"|"PerformanceIndicator", value: float}
+  period_type: string@period-type-completer # Indicates the period type we want use for the report filter
+  --order-by: string@order-by-completer # Indicate on which indicator or value you want to make your formula (e.g. Cost)
+  --order-by-direction: string@order-by-direction-completer # Indicate which direction to order results by (e.g. Ascending)
   --analytics-product-column-filters: record # shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
   --product-columns-to-display: list<string> # e.g. [4b460e31-3d1f-4117-922d-b159a64ec1d2]
   --product-state: string@product-state-completer # You can filter on the product state. (default: All, e.g. All)
@@ -1387,10 +1451,10 @@ export def "optimise-all" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/all/{action_name}") $auth.query)
-  let req_body = {"analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state, "reportType": $report_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "categoryFilter": $category_filter, "channelId": $channel_id, "endPeriodUtcDate": $end_period_utc_date, "performanceIndicatorFilters": $performance_indicator_filters, "periodType": $period_type, "orderBy": $order_by, "orderByDirection": $order_by_direction, "analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state, "reportType": $report_type} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1412,7 +1476,7 @@ export def "optimise-all" [
 export def "optimise-by-category" [
   store_id: string
   catalog_category_id: string
-  action_name: string
+  action_name: string@action-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1432,9 +1496,9 @@ export def "optimise-by-category" [
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), catalog_category_id: (encode-path-segment $catalog_category_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/bycategory/{catalog_category_id}/{action_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1456,7 +1520,7 @@ export def "optimise-by-category" [
 export def "optimise-by-channel" [
   store_id: string
   channel_id: string
-  action_name: string
+  action_name: string@action-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,7 +1538,7 @@ export def "optimise-by-channel" [
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), channel_id: (encode-path-segment $channel_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/bychannel/{channel_id}/{action_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1496,7 +1560,7 @@ export def "optimise-by-channel" [
 export def "optimise-by-product" [
   store_id: string
   product_id: string
-  action_name: string
+  action_name: string@action-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1516,9 +1580,9 @@ export def "optimise-by-product" [
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), product_id: (encode-path-segment $product_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/byproduct/{product_id}/{action_name}") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1551,16 +1615,17 @@ export def "copy-optimisation" [
   channel_id_source: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
   channel_id_target: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
   --keep-existing-optimisation: oneof<nothing, bool> # If true the existing optimisation will be kept (e.g. false)
-]: any -> record<catalogProductCount: int, channel: record<channelId: string, channelImageUrl: string, channelName: string>, enabledProductCount: int> {
+]: any -> oneof<record<catalogProductCount: int, channel: record<channelId: string, channelImageUrl: string, channelName: string>, enabledProductCount: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/optimisations/copy") $auth.query)
   let req_body = {"channelIdSource": $channel_id_source, "channelIdTarget": $channel_id_target, "keepExistingOptimisation": $keep_existing_optimisation} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "keepExistingOptimisation") == null) { error make --unspanned { msg: "required body field 'keepExistingOptimisation' missing: pass --keep-existing-optimisation or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1581,7 +1646,7 @@ export def "copy-optimisation" [
 # operationId: Optimise
 export def "optimise" [
   store_id: string
-  action_name: string
+  action_name: string@action-name-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1591,6 +1656,19 @@ export def "optimise" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  advanced_filters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
+  begin_period_utc_date: string # The begin date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-11-20T00:00:00Z)
+  --category-filter: record # shape: {categoryPath?: list<string>}
+  --channel-id: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
+  end_period_utc_date: string # The end date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-12-20T00:00:00Z)
+  --performance-indicator-filters: list # e.g. [{indicator: Cost, operatorName: Equals, value: 10}] — item shape: {operatorName: string, performanceIndicator: "ClickCount"|"Cost"|"OrderCount"|"ProductCount"|"SoldProductCount"|"DisabledProductCount"|"EnabledProductCount"|"TotalSales"|"Margin"|"ROI"|"PerformanceIndicator", value: float}
+  period_type: string@period-type-completer # Indicates the period type we want use for the report filter
+  --order-by: string@order-by-completer # Indicate on which indicator or value you want to make your formula (e.g. Cost)
+  --order-by-direction: string@order-by-direction-completer # Indicate which direction to order results by (e.g. Ascending)
+  --analytics-product-column-filters: record # shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
+  --product-columns-to-display: list<string> # e.g. [4b460e31-3d1f-4117-922d-b159a64ec1d2]
+  --product-state: string@product-state-completer # You can filter on the product state. (default: All, e.g. All)
+  report_type: string@report-type-completer # The report type (e.g. ByProduct)
   --page-number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
   --page-size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
 ]: any -> any {
@@ -1600,10 +1678,10 @@ export def "optimise" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($action_name | is-empty) { error make --unspanned { msg: "path parameter 'actionName' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), action_name: (encode-path-segment $action_name)} | format pattern "/v2/user/analytics/{store_id}/optimisations/{action_name}") $auth.query)
-  let req_body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "categoryFilter": $category_filter, "channelId": $channel_id, "endPeriodUtcDate": $end_period_utc_date, "performanceIndicatorFilters": $performance_indicator_filters, "periodType": $period_type, "orderBy": $order_by, "orderByDirection": $order_by_direction, "analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state, "reportType": $report_type, "pageNumber": $page_number, "pageSize": $page_size} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1633,18 +1711,27 @@ export def "get-store-report-by-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  advanced_filters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
+  --begin-period-utc-date: string # The begin date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-11-20T00:00:00Z)
+  --category-filter: record # shape: {categoryPath?: list<string>}
+  --channel-id: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
+  --end-period-utc-date: string # The end date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-12-20T00:00:00Z)
+  --performance-indicator-filters: list # e.g. [{indicator: Cost, operatorName: Equals, value: 10}] — item shape: {operatorName: string, performanceIndicator: "ClickCount"|"Cost"|"OrderCount"|"ProductCount"|"SoldProductCount"|"DisabledProductCount"|"EnabledProductCount"|"TotalSales"|"Margin"|"ROI"|"PerformanceIndicator", value: float}
+  period_type: string@period-type-completer # Indicates the period type we want use for the report filter
+  --order-by: string@order-by-completer # Indicate on which indicator or value you want to make your formula (e.g. Cost)
+  --order-by-direction: string@order-by-direction-completer # Indicate which direction to order results by (e.g. Ascending)
   --page-number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
   --page-size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
-]: any -> record<categories: table<allProductCount: int, catalogCategoryId: string, catalogCategoryPath: list, catalogProductCount: int, clickCount: int, cost: float, enabledProductCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, roi: float, soldProductCount: int, totalSales: float>, currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+]: any -> oneof<record<categories: table<allProductCount: int, catalogCategoryId: string, catalogCategoryPath: list, catalogProductCount: int, clickCount: int, cost: float, enabledProductCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, roi: float, soldProductCount: int, totalSales: float>, currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/bycategory") $auth.query)
-  let req_body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "categoryFilter": $category_filter, "channelId": $channel_id, "endPeriodUtcDate": $end_period_utc_date, "performanceIndicatorFilters": $performance_indicator_filters, "periodType": $period_type, "orderBy": $order_by, "orderByDirection": $order_by_direction, "pageNumber": $page_number, "pageSize": $page_size} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1674,18 +1761,27 @@ export def "get-store-report-by-channel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  advanced_filters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
+  --begin-period-utc-date: string # The begin date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-11-20T00:00:00Z)
+  --category-filter: record # shape: {categoryPath?: list<string>}
+  --channel-id: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
+  --end-period-utc-date: string # The end date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-12-20T00:00:00Z)
+  --performance-indicator-filters: list # e.g. [{indicator: Cost, operatorName: Equals, value: 10}] — item shape: {operatorName: string, performanceIndicator: "ClickCount"|"Cost"|"OrderCount"|"ProductCount"|"SoldProductCount"|"DisabledProductCount"|"EnabledProductCount"|"TotalSales"|"Margin"|"ROI"|"PerformanceIndicator", value: float}
+  period_type: string@period-type-completer # Indicates the period type we want use for the report filter
+  --order-by: string@order-by-completer # Indicate on which indicator or value you want to make your formula (e.g. Cost)
+  --order-by-direction: string@order-by-direction-completer # Indicate which direction to order results by (e.g. Ascending)
   --page-number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
   --page-size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
-]: any -> record<channels: table<catalogProductCount: int, channel: record, clickCount: int, cost: float, enabledProductCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, roi: float, soldProductCount: int, totalSales: float>, currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+]: any -> oneof<record<channels: table<catalogProductCount: int, channel: record, clickCount: int, cost: float, enabledProductCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, roi: float, soldProductCount: int, totalSales: float>, currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/bychannel") $auth.query)
-  let req_body = {"pageNumber": $page_number, "pageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "categoryFilter": $category_filter, "channelId": $channel_id, "endPeriodUtcDate": $end_period_utc_date, "performanceIndicatorFilters": $performance_indicator_filters, "periodType": $period_type, "orderBy": $order_by, "orderByDirection": $order_by_direction, "pageNumber": $page_number, "pageSize": $page_size} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1704,7 +1800,6 @@ export def "get-store-report-by-channel" [
 #
 # POST /v2/user/analytics/{storeId}/reports/byday
 # operationId: GetStoreReportByDay
-# --advancedFilters shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
 export def "get-store-report-by-day" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1722,16 +1817,16 @@ export def "get-store-report-by-day" [
   --channel-ids: list<string> # Indicate the channel identifier list (e.g. [2dc136a7-0d3d-4cc9-a825-a28a42c53e28])
   end_period_utc_date: string # The end date of the period for the report (format: date, e.g. 2006-12-20T00:00:00Z)
   --product-id: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
-]: any -> record<currencyCode: string, days: table<allChannels: record, byChannels: list, day: string>, globalPerformanceIndicators: record<allChannels: record<performanceIndicator: float>, byChannels: list<record>>> {
+]: any -> oneof<record<currencyCode: string, days: table<allChannels: record, byChannels: list, day: string>, globalPerformanceIndicators: record<allChannels: record<performanceIndicator: float>, byChannels: list<record>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/byday") $auth.query)
   let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "catalogCategoryId": $catalog_category_id, "channelIds": $channel_ids, "endPeriodUtcDate": $end_period_utc_date, "productId": $product_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1750,7 +1845,6 @@ export def "get-store-report-by-day" [
 #
 # POST /v2/user/analytics/{storeId}/reports/byproduct
 # operationId: GetStoreReportByProduct
-# --analyticsProductColumnFilters shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
 export def "get-store-report-by-product" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1762,21 +1856,30 @@ export def "get-store-report-by-product" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  advanced_filters: record # shape: {globalMarginPercent?: int, linkClickToOrderMaxDay?: int, linkClickToOrderType: "OnPurchaseDate"|"OnClickDate", marginType: "Tracker"|"Global", onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record}
+  begin_period_utc_date: string # The begin date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-11-20T00:00:00Z)
+  --category-filter: record # shape: {categoryPath?: list<string>}
+  --channel-id: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
+  end_period_utc_date: string # The end date period you want to get the report. It's required only in case of custom period type ! (format: date-time, e.g. 2006-12-20T00:00:00Z)
+  --performance-indicator-filters: list # e.g. [{indicator: Cost, operatorName: Equals, value: 10}] — item shape: {operatorName: string, performanceIndicator: "ClickCount"|"Cost"|"OrderCount"|"ProductCount"|"SoldProductCount"|"DisabledProductCount"|"EnabledProductCount"|"TotalSales"|"Margin"|"ROI"|"PerformanceIndicator", value: float}
+  period_type: string@period-type-completer # Indicates the period type we want use for the report filter
+  --order-by: string@order-by-completer # Indicate on which indicator or value you want to make your formula (e.g. Cost)
+  --order-by-direction: string@order-by-direction-completer # Indicate which direction to order results by (e.g. Ascending)
   --page-number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
   --page-size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
   --analytics-product-column-filters: record # shape: {additionalAnalyticsProductColumnFilters?: record, sku?: string, title?: string}
   --product-columns-to-display: list<string> # e.g. [4b460e31-3d1f-4117-922d-b159a64ec1d2]
   product_state: string@product-state-completer # You can filter on the product state. (default: All, e.g. All)
-]: any -> record<currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, products: table<channelCount: int, clickCount: int, cost: float, enabledOnChannelCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, product: record, roi: float, soldProductCount: int, totalSales: float>> {
+]: any -> oneof<record<currencyCode: string, links: record<disableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableAllProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enableProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, products: table<channelCount: int, clickCount: int, cost: float, enabledOnChannelCount: int, links: record, margin: float, orderCount: int, performanceIndicator: float, product: record, roi: float, soldProductCount: int, totalSales: float>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/byproduct") $auth.query)
-  let req_body = {"pageNumber": $page_number, "pageSize": $page_size, "analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"advancedFilters": $advanced_filters, "beginPeriodUtcDate": $begin_period_utc_date, "categoryFilter": $category_filter, "channelId": $channel_id, "endPeriodUtcDate": $end_period_utc_date, "performanceIndicatorFilters": $performance_indicator_filters, "periodType": $period_type, "orderBy": $order_by, "orderByDirection": $order_by_direction, "pageNumber": $page_number, "pageSize": $page_size, "analyticsProductColumnFilters": $analytics_product_column_filters, "productColumnsToDisplay": $product_columns_to_display, "productState": $product_state} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -1806,13 +1909,13 @@ export def "get-report-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, reportFilters: table<links: record, reportFilterId: string, reportFilterName: string, reportType: string>> {
+]: nothing -> oneof<record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, reportFilters: table<links: record, reportFilterId: string, reportFilterName: string, reportType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1850,7 +1953,7 @@ export def "delete-report-filter" [
   if ($report_filter_id | is-empty) { error make --unspanned { msg: "path parameter 'reportFilterId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -1881,14 +1984,14 @@ export def "get-report-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, parameters: record<advancedFilters: record<globalMarginPercent: int, linkClickToOrderMaxDay: int, linkClickToOrderType: string, marginType: string, onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record>, beginPeriodUtcDate: string, categoryFilter: record<categoryPath: list>, channelId: string, endPeriodUtcDate: string, performanceIndicatorFilters: list<record>, periodType: string, analyticsProductColumnFilters: record<additionalAnalyticsProductColumnFilters: record, sku: string, title: string>, productColumnsToDisplay: list<string>, productState: string, reportType: string>, reportFilterId: string, reportFilterName: string> {
+]: nothing -> oneof<record<links: record<delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, parameters: record<advancedFilters: record<globalMarginPercent: int, linkClickToOrderMaxDay: int, linkClickToOrderType: string, marginType: string, onlyDirectSales: bool, onlyPaymentValidatedOrders: bool, performanceIndicatorFormula: record>, beginPeriodUtcDate: string, categoryFilter: record<categoryPath: list>, channelId: string, endPeriodUtcDate: string, performanceIndicatorFilters: list<record>, periodType: string, analyticsProductColumnFilters: record<additionalAnalyticsProductColumnFilters: record, sku: string, title: string>, productColumnsToDisplay: list<string>, productState: string, reportType: string>, reportFilterId: string, reportFilterName: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($report_filter_id | is-empty) { error make --unspanned { msg: "path parameter 'reportFilterId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -1919,7 +2022,7 @@ export def "save-report-filter" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  parameters: any
+  parameters: record # Contains common filter parameters — shape: {advancedFilters: record, beginPeriodUtcDate: string, categoryFilter?: record, channelId?: string, endPeriodUtcDate: string, performanceIndicatorFilters?: list, periodType: "Custom"|"Yesterday"|"Last7Days"|"LastWeek"|"ThisMonth"|"Last30Days"|"LastMonth"|"Last60Days"|"Last90Days"|"Last3Months", analyticsProductColumnFilters?: record, productColumnsToDisplay?: list<string>, productState?: "All"|"Enabled"|"Disabled", reportType: "ByChannel"|"ByCategory"|"ByProduct"|"ByDay"}
   report_filter_name: string # Report filter name (e.g. My report filter)
 ]: any -> any {
   let input = $in
@@ -1929,9 +2032,9 @@ export def "save-report-filter" [
   if ($report_filter_id | is-empty) { error make --unspanned { msg: "path parameter 'reportFilterId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), report_filter_id: (encode-path-segment $report_filter_id)} | format pattern "/v2/user/analytics/{store_id}/reports/filters/{report_filter_id}") $auth.query)
   let req_body = {"parameters": $parameters, "reportFilterName": $report_filter_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -1961,13 +2064,13 @@ export def "get-rules" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<create: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, run: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, rules: table<actionName: string, enabled: bool, lastExecutionStatus: string, lastExecutionUtcDate: string, links: record, position: int, reportFilterId: string, ruleId: string, ruleName: string, validityEndUtcDate: string, validityStartUtcDate: string>> {
+]: nothing -> oneof<record<links: record<create: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, run: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, rules: table<actionName: string, enabled: bool, lastExecutionStatus: string, lastExecutionUtcDate: string, links: record, position: int, reportFilterId: string, ruleId: string, ruleName: string, validityEndUtcDate: string, validityStartUtcDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2009,9 +2112,9 @@ export def "create-rule" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules") $auth.query)
   let req_body = {"endUtcDate": $end_utc_date, "optimisationActionName": $optimisation_action_name, "reportFilterId": $report_filter_id, "ruleName": $rule_name, "startUtcDate": $start_utc_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2041,16 +2144,18 @@ export def "get-rules-executions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # The page to retrieve (default: 1)
-  --page-size: int # The count of rule history to retrieve (default: 10)
-]: nothing -> record<executions: table<activeAffectedProductCount: int, affectedChannelCount: int, affectedProductCount: int, completedUtcDate: string, errorType: string, executionSource: string, links: record, optimisationActionName: string, reportUrl: string, ruleId: string, ruleName: string, startedUtcDate: string, status: string, userId: string>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+  --page-number: int # The page to retrieve (required, default: 1)
+  --page-size: int # The count of rule history to retrieve (required, default: 10)
+]: nothing -> oneof<record<executions: table<activeAffectedProductCount: int, affectedChannelCount: int, affectedProductCount: int, completedUtcDate: string, errorType: string, executionSource: string, links: record, optimisationActionName: string, reportUrl: string, ruleId: string, ruleName: string, startedUtcDate: string, status: string, userId: string>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
+  let page_number = ($page_number | default "1")
+  let page_size = ($page_size | default "10")
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules/executions") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2086,7 +2191,7 @@ export def "run-rules" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/rules/run") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2124,7 +2229,7 @@ export def "delete-rule" [
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2155,14 +2260,14 @@ export def "get-rule" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<actionName: string, enabled: bool, lastExecutionStatus: string, lastExecutionUtcDate: string, links: record<delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, movedown: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, moveup: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportFilter: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, run: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, update: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, position: int, reportFilterId: string, ruleId: string, ruleName: string, validityEndUtcDate: string, validityStartUtcDate: string> {
+]: nothing -> oneof<record<actionName: string, enabled: bool, lastExecutionStatus: string, lastExecutionUtcDate: string, links: record<delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, movedown: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, moveup: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reportFilter: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, run: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, update: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, position: int, reportFilterId: string, ruleId: string, ruleName: string, validityEndUtcDate: string, validityStartUtcDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2204,9 +2309,9 @@ export def "update-rule" [
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}") $auth.query)
   let req_body = {"endUtcDate": $end_utc_date, "ruleName": $rule_name, "startUtcDate": $start_utc_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -2244,7 +2349,7 @@ export def "disable-rule" [
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/disable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2282,7 +2387,7 @@ export def "enable-rule" [
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/enable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2320,7 +2425,7 @@ export def "move-down-rule" [
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/movedown") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2358,7 +2463,7 @@ export def "move-up-rule" [
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/moveup") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2396,7 +2501,7 @@ export def "run-rule" [
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), rule_id: (encode-path-segment $rule_id)} | format pattern "/v2/user/analytics/{store_id}/rules/{rule_id}/run") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2427,14 +2532,14 @@ export def "get-store-tracked-clicks" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # The amount of clicks to retrieve (default: 100)
-]: nothing -> record<clicks: table<channel: record, ipAddress: string, product: record, utcDate: string>> {
+]: nothing -> oneof<record<clicks: table<channel: record, ipAddress: string, product: record, utcDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/clicks") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2465,14 +2570,14 @@ export def "get-store-tracked-external-orders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # The amount of external orders to retrieve (default: 100)
-]: nothing -> record<externalOrders: table<currencyCode: string, merchantOrderId: string, paymentValidated: bool, products: list, totalAmount: float, utcDate: string, visitorId: string>> {
+]: nothing -> oneof<record<externalOrders: table<currencyCode: string, merchantOrderId: string, paymentValidated: bool, products: list, totalAmount: float, utcDate: string, visitorId: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/externalorders") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2503,14 +2608,14 @@ export def "get-store-tracked-orders" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --count: int # The amount of orders to retrieve (default: 100)
-]: nothing -> record<orders: table<channel: record, currencyCode: string, merchantOrderId: string, paymentValidated: bool, products: list, totalAmount: float, utcDate: string>> {
+]: nothing -> oneof<record<orders: table<channel: record, currencyCode: string, merchantOrderId: string, paymentValidated: bool, products: list, totalAmount: float, utcDate: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let qp = [(serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/orders") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2540,13 +2645,13 @@ export def "get-store-tracking-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<clickSynchronizationUtcDate: string, marketplaceOrderSynchonizationUtcDate: string, orderSynchonizationUtcDate: string> {
+]: nothing -> oneof<record<clickSynchronizationUtcDate: string, marketplaceOrderSynchonizationUtcDate: string, orderSynchonizationUtcDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/analytics/{store_id}/tracking/status") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2575,12 +2680,12 @@ export def "catalog-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<beezUPColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<beezUPColumnDataTypeLov: record<href: string, method: string>, beezUPColumnDisplayGroupLov: record<href: string, method: string>, beezUPColumnImportanceLov: record<href: string, method: string>, beezUPColumnLov: record<href: string, method: string>, compareOptionLov: record<href: string, method: string>, duplicateProductValueStrategyLov: record<href: string, method: string>>, storeLinks: record<links: record>> {
+]: nothing -> oneof<record<links: record<beezUPColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<beezUPColumnDataTypeLov: record<href: string, method: string>, beezUPColumnDisplayGroupLov: record<href: string, method: string>, beezUPColumnImportanceLov: record<href: string, method: string>, beezUPColumnLov: record<href: string, method: string>, compareOptionLov: record<href: string, method: string>, duplicateProductValueStrategyLov: record<href: string, method: string>>, storeLinks: record<links: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/catalogs/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2609,12 +2714,12 @@ export def "catalog-get-beez-up-columns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<beezUPColumnName: string, canBeTruncated: bool, columnDataType: string, columnImportance: string, description: string, displayGroupName: string, unique: bool> {
+]: nothing -> oneof<table<beezUPColumnName: string, canBeTruncated: bool, columnDataType: string, columnImportance: string, description: string, displayGroupName: string, unique: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/catalogs/beezupColumns" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2643,12 +2748,12 @@ export def "importation-get-reportings-all-stores" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/catalogs/importations" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2678,13 +2783,13 @@ export def "catalog-store-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<autoImportInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, catalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, categories: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, computeExpression: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, customColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, importations: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, inputConfiguration: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, products: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, randomProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, startImportation: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, status: string> {
+]: nothing -> oneof<record<links: record<autoImportInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, catalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, categories: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, computeExpression: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, customColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, importations: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, inputConfiguration: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, products: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, randomProducts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, startImportation: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2720,7 +2825,7 @@ export def "auto-delete-auto-import" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -2750,13 +2855,13 @@ export def "auto-get-auto-import-configuration" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<duplicateProductConfiguration: record<compareOptions: string, strategy: string>, input: record<files: list<record>, transformFileUrl: string>, inputConfiguredByUserId: string, pauseStatusChangedByUserId: string, pauseStatusChangedUtcDate: string, paused: bool, scheduledByUserId: string, schedulingLocalTimeZoneName: string, schedulingType: string, schedulingValue: list<string>> {
+]: nothing -> oneof<record<duplicateProductConfiguration: record<compareOptions: string, strategy: string>, input: record<files: list<record>, transformFileUrl: string>, inputConfiguredByUserId: string, pauseStatusChangedByUserId: string, pauseStatusChangedUtcDate: string, paused: bool, scheduledByUserId: string, schedulingLocalTimeZoneName: string, schedulingType: string, schedulingValue: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -2792,7 +2897,7 @@ export def "importation-activate-auto-import" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/activate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2828,7 +2933,7 @@ export def "auto-pause-auto-import" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/pause") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2864,7 +2969,7 @@ export def "auto-resume-auto-import" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/resume") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2902,9 +3007,9 @@ export def "auto-configure-auto-import-interval" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/scheduling/interval") $auth.query)
   let req_body = {"interval": $interval} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2943,9 +3048,9 @@ export def "auto-schedule-auto-import" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/scheduling/schedules") $auth.query)
   let req_body = {"localTimeZoneName": $local_time_zone_name, "schedules": $schedules} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2975,13 +3080,13 @@ export def "auto-start-auto-import" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/autoImport/start") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3011,13 +3116,13 @@ export def "catalog-get-catalog-columns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<catalogColumns: table<catalogColumnName: string, configuration: record, duplicateProductValueConfiguration: record, id: string, ignored: bool, links: record, userColumName: string>> {
+]: nothing -> oneof<record<catalogColumns: table<catalogColumnName: string, configuration: record, duplicateProductValueConfiguration: record, id: string, ignored: bool, links: record, userColumName: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/catalogColumns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3057,9 +3162,9 @@ export def "catalog-change-catalog-column-user-name" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/catalogColumns/{column_id}/rename") $auth.query)
   let req_body = {"userColumName": $user_colum_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3089,16 +3194,17 @@ export def "catalog-get-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-encoding: list<string> # Indicates that the client accepts that the response will be compressed to reduce traffic size.
-]: nothing -> record<categories: table<categoryId: string, categoryPath: list, selfProductCount: int, totalProductCount: int>> {
+  --accept-encoding: list<string> # Indicates that the client accepts that the response will be compressed to reduce traffic size. (required)
+]: nothing -> oneof<record<categories: table<categoryId: string, categoryPath: list, selfProductCount: int, totalProductCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
+  if ($accept_encoding == null) { error make --unspanned { msg: "required header parameter 'Accept-Encoding' missing: pass --accept-encoding" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/categories") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding })} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | compact | each { into string } | str join "," } else { $accept_encoding })} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3128,13 +3234,13 @@ export def "catalog-get-custom-columns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<customColumns: table<catalogColumnDependencies: list, configuration: record, id: string, links: record, userColumName: string>, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<customColumns: table<catalogColumnDependencies: list, configuration: record, id: string, links: record, userColumName: string>, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3173,9 +3279,9 @@ export def "catalog-compute-expression" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/computeExpression") $auth.query)
   let req_body = {"encryptedExpression": $encrypted_expression, "productValues": $product_values} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3213,7 +3319,7 @@ export def "catalog-delete-custom-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -3256,9 +3362,9 @@ export def "catalog-save-custom-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}") $auth.query)
   let req_body = {"displayGroupName": $display_group_name, "encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression, "userColumnName": $user_column_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3296,7 +3402,7 @@ export def "catalog-get-custom-column-expression" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/expression") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3337,9 +3443,9 @@ export def "catalog-change-custom-column-expression" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/expression") $auth.query)
   let req_body = {"encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -3379,9 +3485,9 @@ export def "catalog-change-custom-column-user-name" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/customColumns/{column_id}/rename") $auth.query)
   let req_body = {"userColumName": $user_colum_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3411,13 +3517,13 @@ export def "importation-get-reportings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<importations: table<autoImported: bool, beginUtcDate: string, endUtcDate: string, errors: list, executionId: string, inputConfigurationUrl: string, lastUpdateUtcDate: string, links: record, stepName: string, steps: record, success: bool, totalProductCount: int, totalProductErrorCount: int, totalProductSuccessCount: int, userId: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, start: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<importations: table<autoImported: bool, beginUtcDate: string, endUtcDate: string, errors: list, executionId: string, inputConfigurationUrl: string, lastUpdateUtcDate: string, links: record, stepName: string, steps: record, success: bool, totalProductCount: int, totalProductErrorCount: int, totalProductSuccessCount: int, userId: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, start: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/importations") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3436,8 +3542,6 @@ export def "importation-get-reportings" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/start
 # operationId: Importation_StartManualUpdate
-# --duplicateProductSkuConfiguration shape: {compareOptions: "None"|"IgnoreCase"|"IgnoreNonSpace"|"IgnoreSymbols"|"OrdinalIgnoreCase"|"StringSort"|"Ordinal", strategy: "None"|"SkipAllDuplicateProducts"|"KeepFirstDuplicateProductOnly"|"FailImportationIfAnyDuplicateProduct"}
-# --input shape: {files: list, transformFileUrl?: string}
 export def "importation-start-manual-update" [
   store_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3450,17 +3554,18 @@ export def "importation-start-manual-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --duplicate-product-sku-configuration: record # Describe how you want to manage the duplication of the product value — shape: {compareOptions: "None"|"IgnoreCase"|"IgnoreNonSpace"|"IgnoreSymbols"|"OrdinalIgnoreCase"|"StringSort"|"Ordinal", strategy: "None"|"SkipAllDuplicateProducts"|"KeepFirstDuplicateProductOnly"|"FailImportationIfAnyDuplicateProduct"}
-  input: record # Describe the input configuration — shape: {files: list, transformFileUrl?: string}
-]: any -> any {
+  --body-input: record # Describe the input configuration — shape: {files: list, transformFileUrl?: string} (spec name: input)
+]: any -> oneof<record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/start") $auth.query)
-  let req_body = {"duplicateProductSkuConfiguration": $duplicate_product_sku_configuration, "input": $input} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"duplicateProductSkuConfiguration": $duplicate_product_sku_configuration, "input": $body_input} | compact
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "input") == null) { error make --unspanned { msg: "required body field 'input' missing: pass --body-input or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3491,14 +3596,14 @@ export def "importation-get-importation-monitoring" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<beginUtcDate: string, errors: table<arguments: list, code: string, cultureName: string, docUrl: string, message: string>, executionId: string, lastUpdateUtcDate: string, links: record<activateAutoImport: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, cancel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, catalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, commit: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, commitColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureRemainingCatalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, customColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, productSamples: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, technicalProgression: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, steps: record, success: bool, userId: string> {
+]: nothing -> oneof<record<beginUtcDate: string, errors: table<arguments: list, code: string, cultureName: string, docUrl: string, message: string>, executionId: string, lastUpdateUtcDate: string, links: record<activateAutoImport: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, cancel: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, catalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, commit: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, commitColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureRemainingCatalogColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, customColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, productSamples: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, technicalProgression: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, steps: record, success: bool, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3536,7 +3641,7 @@ export def "importation-cancel" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3567,14 +3672,14 @@ export def "importation-get-detected-catalog-columns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<detectedCatalogColumns: table<catalogColumnName: string, configuration: record, duplicateProductValueConfiguration: record, id: string, ignored: bool, links: record, userColumName: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<detectedCatalogColumns: table<catalogColumnName: string, configuration: record, duplicateProductValueConfiguration: record, id: string, ignored: bool, links: record, userColumName: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3593,7 +3698,6 @@ export def "importation-get-detected-catalog-columns" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/catalogColumns/{columnId}
 # operationId: Importation_ConfigureCatalogColumn
-# --catalogColumn shape: {catalogColumnName: string, configuration: record, duplicateProductValueConfiguration?: record, id: string, ignored?: bool, links: record, userColumName: string}
 export def "importation-configure-catalog-column" [
   store_id: string
   execution_id: string
@@ -3617,9 +3721,9 @@ export def "importation-configure-catalog-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}") $auth.query)
   let req_body = {"catalogColumn": $catalog_column} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3659,7 +3763,7 @@ export def "importation-ignore-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/ignore") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3701,9 +3805,9 @@ export def "importation-map-catalog-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/map") $auth.query)
   let req_body = {"beezUPColumnName": $beez_up_column_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3743,7 +3847,7 @@ export def "importation-reattend-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/reattend") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3783,7 +3887,7 @@ export def "importation-unmap-catalog-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/catalogColumns/{column_id}/unmap") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3821,7 +3925,7 @@ export def "importation-commit" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/commit") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3859,7 +3963,7 @@ export def "importation-commit-columns" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/commitColumns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3897,7 +4001,7 @@ export def "importation-configure-remaining-catalog-columns" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/configureRemainingCatalogColumns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -3928,14 +4032,14 @@ export def "importation-get-custom-columns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<customColumns: table<configuration: record, id: string, links: record, userColumName: string>, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<customColumns: table<configuration: record, id: string, links: record, userColumName: string>, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -3975,7 +4079,7 @@ export def "importation-delete-custom-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4019,9 +4123,9 @@ export def "importation-save-custom-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}") $auth.query)
   let req_body = {"encryptedBlocklyExpression": $encrypted_blockly_expression, "encryptedExpression": $encrypted_expression, "userColumName": $user_colum_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4061,7 +4165,7 @@ export def "importation-get-custom-column-expression" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/expression") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4103,9 +4207,9 @@ export def "importation-map-custom-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/map") $auth.query)
   let req_body = {"beezUPColumnName": $beez_up_column_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4145,7 +4249,7 @@ export def "importation-unmap-custom-column" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/customColumns/{column_id}/unmap") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4177,7 +4281,7 @@ export def "importation-get-product-sample" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<productValues: record> {
+]: nothing -> oneof<record<productValues: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -4185,7 +4289,7 @@ export def "importation-get-product-sample" [
   if ($product_sample_index | is-empty) { error make --unspanned { msg: "path parameter 'productSampleIndex' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), product_sample_index: (encode-path-segment $product_sample_index)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/productSamples/{product_sample_index}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4227,7 +4331,7 @@ export def "importation-get-product-sample-custom-column-value" [
   if ($column_id | is-empty) { error make --unspanned { msg: "path parameter 'columnId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id), product_sample_index: (encode-path-segment $product_sample_index), column_id: (encode-path-segment $column_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/productSamples/{product_sample_index}/customColumns/{column_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4246,7 +4350,6 @@ export def "importation-get-product-sample-custom-column-value" [
 #
 # POST /v2/user/catalogs/{storeId}/importations/{executionId}/products/list
 # operationId: Importation_GetProductsReport
-# --errorCodes item shape: {errorCode?: string, userColumnName?: string}
 export def "importation-get-products-report" [
   store_id: string
   execution_id: string
@@ -4266,7 +4369,7 @@ export def "importation-get-products-report" [
   page_size: int # Indicate the item count per page (format: int32, default: 100, e.g. 100)
   --sku: string # Filter by Sku (equals)
   --title: string # Filter by Title (StartsWith)
-]: any -> record<paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, productErrors: table<ean: string, errors: list, lineNumber: int, mpn: string, sku: string, title: string>> {
+]: any -> oneof<record<paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, productErrors: table<ean: string, errors: list, lineNumber: int, mpn: string, sku: string, title: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4274,9 +4377,9 @@ export def "importation-get-products-report" [
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/products/list") $auth.query)
   let req_body = {"ean": $ean, "errorCodes": $error_codes, "mpn": $mpn, "pageNumber": $page_number, "pageSize": $page_size, "sku": $sku, "title": $title} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4307,14 +4410,14 @@ export def "importation-get-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categories: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>, columns: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>, errors: table<beezUPColumnName: string, errorCode: string, productCount: int, userColumName: string>, executionId: string, importationInfo: record<beginUtcDate: string, endUtcDate: string, inputConfiguration: record<fetch: record, fileNumber: int, read: record>, userId: string>, productMetrics: record<activeCount: int, detectedCount: int, duplicatedCount: int, failedCount: int>, products: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>> {
+]: nothing -> oneof<record<categories: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>, columns: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>, errors: table<beezUPColumnName: string, errorCode: string, productCount: int, userColumName: string>, executionId: string, importationInfo: record<beginUtcDate: string, endUtcDate: string, inputConfiguration: record<fetch: record, fileNumber: int, read: record>, userId: string>, productMetrics: record<activeCount: int, detectedCount: int, duplicatedCount: int, failedCount: int>, products: record<createdCount: int, deletedCount: int, unchangedCount: int, updatedCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/report") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4345,14 +4448,14 @@ export def "importation-technical-progression" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<stepsProgression: record> {
+]: nothing -> oneof<record<stepsProgression: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), execution_id: (encode-path-segment $execution_id)} | format pattern "/v2/user/catalogs/{store_id}/importations/{execution_id}/technicalProgression") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4382,13 +4485,13 @@ export def "importation-get-manual-update-last-input-config" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<input: record<files: list<record>, transformFileUrl: string>> {
+]: nothing -> oneof<record<input: record<files: list<record>, transformFileUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/inputConfiguration") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4418,15 +4521,16 @@ export def "catalog-get-product-by-sku" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sku: string # The product sku you want to get
-]: nothing -> record<categoryId: string, exists: bool, productId: string, values: record> {
+  --sku: string # The product sku you want to get (required)
+]: nothing -> oneof<record<categoryId: string, exists: bool, productId: string, values: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
+  if ($sku == null) { error make --unspanned { msg: "required query parameter 'sku' missing: pass --sku" } }
   let qp = [(serialize-qp "sku" $sku "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4468,16 +4572,16 @@ export def "catalog-get-products" [
   --sku: string # Search for product by sku (e.g. MySku123)
   --title: string # Search for products containing this title (e.g. Frigo)
   --without-sub-categories: oneof<nothing, bool> # Do not retrieve sub categories. By default, this value is set to false (e.g. false)
-]: any -> record<paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, products: table<categoryId: string, exists: bool, productId: string, values: record>> {
+]: any -> oneof<record<paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, products: table<categoryId: string, exists: bool, productId: string, values: record>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products/list") $auth.query)
   let req_body = {"categoryPath": $category_path, "columnIdList": $column_id_list, "ean": $ean, "exists": $exists, "mpn": $mpn, "orderByCatalogColumnId": $order_by_catalog_column_id, "pageNumber": $page_number, "pageSize": $page_size, "productIdList": $product_id_list, "sku": $sku, "title": $title, "withoutSubCategories": $without_sub_categories} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4507,13 +4611,13 @@ export def "catalog-get-random-products" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<products: table<categoryId: string, exists: bool, productId: string, values: record>> {
+]: nothing -> oneof<record<products: table<categoryId: string, exists: bool, productId: string, values: record>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/catalogs/{store_id}/products/random") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4544,14 +4648,14 @@ export def "catalog-get-product-by-product-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<categoryId: string, exists: bool, productId: string, values: record> {
+]: nothing -> oneof<record<categoryId: string, exists: bool, productId: string, values: record>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/catalogs/{store_id}/products/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4581,13 +4685,13 @@ export def "get-channel-catalogs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
-]: nothing -> record<channelCatalogs: record, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, beezUPColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, filterOperators: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<channelCatalogExclusionFilterOperatorLov: record<href: string, method: string>, channelCatalogExportCacheStatusLov: record<href: string, method: string>>> {
+]: nothing -> oneof<record<channelCatalogs: record, links: record<add: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, beezUPColumns: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, filterOperators: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<channelCatalogExclusionFilterOperatorLov: record<href: string, method: string>, channelCatalogExportCacheStatusLov: record<href: string, method: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/channelCatalogs/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4618,15 +4722,15 @@ export def "add-channel-catalog" [
   --dry-run(-n) # Return the request that would be sent without executing it
   channel_id: string # The channel identifier (format: guid, e.g. 2dc136a7-0d3d-4cc9-a825-a28a42c53e28)
   store_id: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
-]: any -> record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool> {
+]: any -> oneof<record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/channelCatalogs/" $auth.query)
   let req_body = {"channelId": $channel_id, "storeId": $store_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4655,12 +4759,12 @@ export def "get-channel-catalog-filter-operators" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<expectedChannelColumnDataType: string, expectedValueDataType: string, name: string, valueRequired: bool> {
+]: nothing -> oneof<table<expectedChannelColumnDataType: string, expectedValueDataType: string, name: string, valueRequired: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/channelCatalogs/filterOperators" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4692,15 +4796,15 @@ export def "get-channel-catalog-product-by-channel-catalog" [
   channel_catalog_ids: list<string> # The list of channel catalog identifier
   product_id: string # The product identifier (format: guid, e.g. 578419df-1bbf-41a6-96fa-862e42182b67)
   store_id: string # The store identifier (format: guid, e.g. 64f43358-63a1-47f7-97ec-0301fc39956b)
-]: any -> record<channelCatalogs: record> {
+]: any -> oneof<record<channelCatalogs: record>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/channelCatalogs/products" $auth.query)
   let req_body = {"channelCatalogIds": $channel_catalog_ids, "productId": $product_id, "storeId": $store_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4736,7 +4840,7 @@ export def "delete-channel-catalog" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -4766,13 +4870,13 @@ export def "get-channel-catalog" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<channelId: string, channelImageUrl: string, channelName: string, categoryMappingSettings: record<categoryMappingDisabledByMerchant: bool>, channelCatalogId: string, channelCategorySettings: record<mappingLeafRequired: bool, mappingRequired: bool>, channelCostSettings: record<costType: string, globalCostValue: float>, columnMappings: table<catalogColumnId: string, channelCategoryPath: list, channelColumnId: string, catalogBeezUPColumnName: string, catalogColumnName: string, channelBeezUPColumnName: string, channelColumnName: string>, costSettings: record<costType: string, globalCostValue: float>, enabled: bool, exclusionFilters: table<channelColumnId: string, enabled: bool, groupId: string, name: string, operatorName: string, position: int, positionInGroup: int, value: string>, exportUrl: string, generalSettings: record<acceptToPublishInfo: bool, activeBeezUPTracking: bool, doNotExportOutOfStockProducts: bool>, isMarketplace: bool, links: record<categoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, channelInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureColumnMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureCostSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureGeneralSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableCategoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exclusionFilters: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exportationCacheInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, marketplaceSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, products: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenableCategoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, state: record<apiSettingsStatus: string, categoryMappingState: record<status: string, uncategorizedProductCount: int, withoutCategoryCostProductCount: int>, columnMappingStatus: string, exportedProductCount: int>, storeId: string, types: list<string>> {
+]: nothing -> oneof<record<channelId: string, channelImageUrl: string, channelName: string, categoryMappingSettings: record<categoryMappingDisabledByMerchant: bool>, channelCatalogId: string, channelCategorySettings: record<mappingLeafRequired: bool, mappingRequired: bool>, channelCostSettings: record<costType: string, globalCostValue: float>, columnMappings: table<catalogColumnId: string, channelCategoryPath: list, channelColumnId: string, catalogBeezUPColumnName: string, catalogColumnName: string, channelBeezUPColumnName: string, channelColumnName: string>, costSettings: record<costType: string, globalCostValue: float>, enabled: bool, exclusionFilters: table<channelColumnId: string, enabled: bool, groupId: string, name: string, operatorName: string, position: int, positionInGroup: int, value: string>, exportUrl: string, generalSettings: record<acceptToPublishInfo: bool, activeBeezUPTracking: bool, doNotExportOutOfStockProducts: bool>, isMarketplace: bool, links: record<categoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, channelInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureColumnMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureCostSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, configureGeneralSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, disableCategoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, enable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exclusionFilters: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exportationCacheInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, marketplaceSettings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, products: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenableCategoryMappings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, state: record<apiSettingsStatus: string, categoryMappingState: record<status: string, uncategorizedProductCount: int, withoutCategoryCostProductCount: int>, columnMappingStatus: string, exportedProductCount: int>, storeId: string, types: list<string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4802,13 +4906,13 @@ export def "get-channel-catalog-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<channelCatalogCategoryConfigurations: table<catalogCategoryPath: list, channelCategoryPath: list, costValue: float, links: record>, costStatus: string, links: record<disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, mappingStatus: string> {
+]: nothing -> oneof<record<channelCatalogCategoryConfigurations: table<catalogCategoryPath: list, channelCategoryPath: list, costValue: float, links: record>, costStatus: string, links: record<disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, mappingStatus: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -4827,7 +4931,6 @@ export def "get-channel-catalog-categories" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/categories/configure
 # operationId: ConfigureChannelCatalogCategory
-# --channelCatalogCategories item shape: {autoMapNewSubCategories: bool, catalogCategoryPath: list<string>, channelCategoryPath?: list<string>, costValue?: float}
 export def "configure-channel-catalog-category" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4848,9 +4951,10 @@ export def "configure-channel-catalog-category" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/configure") $auth.query)
   let req_body = {"channelCatalogCategories": $channel_catalog_categories, "overrideSubCategoryMappings": $override_sub_category_mappings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "overrideSubCategoryMappings") == null) { error make --unspanned { msg: "required body field 'overrideSubCategoryMappings' missing: pass --override-sub-category-mappings or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4886,7 +4990,7 @@ export def "disable-channel-catalog-category-mapping" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/disableMapping") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4922,7 +5026,7 @@ export def "reenable-channel-catalog-category-mapping" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/categories/reenableMapping") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -4960,9 +5064,9 @@ export def "configure-channel-catalog-column-mappings" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/columnMappings") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -4998,7 +5102,7 @@ export def "disable-channel-catalog" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/disable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5034,7 +5138,7 @@ export def "enable-channel-catalog" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/enable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5064,13 +5168,13 @@ export def "get-channel-catalog-exclusion-filters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<exclusionFilters: table<channelColumnId: string, enabled: bool, groupId: string, name: string, operatorName: string, position: int, positionInGroup: int, value: string>, links: record<configure: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<exclusionFilters: table<channelColumnId: string, enabled: bool, groupId: string, name: string, operatorName: string, position: int, positionInGroup: int, value: string>, links: record<configure: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exclusionFilters") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5108,9 +5212,9 @@ export def "configure-channel-catalog-exclusion-filters" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exclusionFilters") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5140,13 +5244,13 @@ export def "get-channel-catalog-exportation-cache-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cacheInfo: record<cacheStatus: string, expirationUtcDate: string, feedUrl: string, lastContentChangeUtcDate: string, lastUpdateUtcDate: string>, links: record<clear: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<cacheInfo: record<cacheStatus: string, expirationUtcDate: string, feedUrl: string, lastContentChangeUtcDate: string, lastUpdateUtcDate: string>, links: record<clear: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/cache") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5182,7 +5286,7 @@ export def "clear-channel-catalog-exportation-cache" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/cache/clear") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5212,16 +5316,18 @@ export def "get-channel-catalog-exportation-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # The page number you want to get (format: int32, e.g. 1)
-  --page-size: int # The entry count you want to get (format: int32, e.g. 25)
-]: nothing -> record<exportations: table<cacheStatus: string, clientIpAddress: string, clientUserAgent: string, exportationDuration: string, exportationUtcDate: string, exportedProductCount: int>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+  --page-number: int # The page number you want to get (required, format: int32, e.g. 1)
+  --page-size: int # The entry count you want to get (required, format: int32, e.g. 25)
+]: nothing -> oneof<record<exportations: table<cacheStatus: string, clientIpAddress: string, clientUserAgent: string, exportationDuration: string, exportationUtcDate: string, exportedProductCount: int>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
+  if ($page_size == null) { error make --unspanned { msg: "required query parameter 'pageSize' missing: pass --page-size" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/exportations/history") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5240,10 +5346,6 @@ export def "get-channel-catalog-exportation-history" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/products
 # operationId: GetChannelCatalogProductInfoList
-# --catalogCategoryFilter shape: {categoryPath?: list<string>}
-# --channelCategoryFilter shape: {categoryPath?: list<string>}
-# --criteria shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
-# --productFilters shape: {additionalProductFilters?: record, catalogEans?: list<string>, catalogMpns?: list<string>, catalogSkus?: list<string>, channelEans?: list<string>, channelMpns?: list<string>, channelSkus?: list<string>, title?: string}
 export def "get-channel-catalog-product-info-list" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5262,16 +5364,16 @@ export def "get-channel-catalog-product-info-list" [
   page_number: int # format: int32, e.g. 1
   page_size: int # format: int32, e.g. 100
   --product-filters: record # shape: {additionalProductFilters?: record, catalogEans?: list<string>, catalogMpns?: list<string>, catalogSkus?: list<string>, channelEans?: list<string>, channelMpns?: list<string>, channelSkus?: list<string>, title?: string}
-]: any -> record<links: record<export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, productInfos: table<productExists: bool, productId: string, productImageUrl: string, productSku: string, productTitle: string, disabled: bool, excluded: bool, excludedBy: list, links: record, overrides: record, uncategorized: bool>> {
+]: any -> oneof<record<links: record<export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>, productInfos: table<productExists: bool, productId: string, productImageUrl: string, productSku: string, productTitle: string, disabled: bool, excluded: bool, excludedBy: list, links: record, overrides: record, uncategorized: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products") $auth.query)
   let req_body = {"catalogCategoryFilter": $catalog_category_filter, "channelCategoryFilter": $channel_category_filter, "criteria": $criteria, "overridden": $overridden, "pageNumber": $page_number, "pageSize": $page_size, "productFilters": $product_filters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5301,13 +5403,13 @@ export def "get-channel-catalog-products-counters" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<disabledProductCountExcludingUncategorized: int, disabledProductCountIncludingUncategorized: int, excludedProductCountExcludingUncategorizedAndDisabled: int, excludedProductCountIncludingUncategorizedAndDisabled: int, existingProductCount: int, uncategorizedProductCount: int> {
+]: nothing -> oneof<record<disabledProductCountExcludingUncategorized: int, disabledProductCountIncludingUncategorized: int, excludedProductCountExcludingUncategorizedAndDisabled: int, excludedProductCountIncludingUncategorizedAndDisabled: int, existingProductCount: int, uncategorizedProductCount: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/counters") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5326,10 +5428,6 @@ export def "get-channel-catalog-products-counters" [
 #
 # POST /v2/user/channelCatalogs/{channelCatalogId}/products/export
 # operationId: ExportChannelCatalogProductInfoList
-# --catalogCategoryFilter shape: {categoryPath?: list<string>}
-# --channelCategoryFilter shape: {categoryPath?: list<string>}
-# --criteria shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
-# --productFilters shape: {additionalProductFilters?: record, catalogEans?: list<string>, catalogMpns?: list<string>, catalogSkus?: list<string>, channelEans?: list<string>, channelMpns?: list<string>, channelSkus?: list<string>, title?: string}
 export def "export-channel-catalog-product-info-list" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5341,7 +5439,7 @@ export def "export-channel-catalog-product-info-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --format: string@format-completer # The file type of the exportation
+  --format: string@format-completer # The file type of the exportation (required)
   --catalog-category-filter: record # shape: {categoryPath?: list<string>}
   --channel-category-filter: record # shape: {categoryPath?: list<string>}
   criteria: record # shape: {disabled?: bool, excluded?: bool, exist?: bool, logic: "funnel"|"cumulative", uncategorized?: bool}
@@ -5349,17 +5447,18 @@ export def "export-channel-catalog-product-info-list" [
   page_number: int # format: int32, e.g. 1
   page_size: int # format: int32, e.g. 100
   --product-filters: record # shape: {additionalProductFilters?: record, catalogEans?: list<string>, catalogMpns?: list<string>, catalogSkus?: list<string>, channelEans?: list<string>, channelMpns?: list<string>, channelSkus?: list<string>, title?: string}
-]: any -> record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool> {
+]: any -> oneof<record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
+  if ($format == null) { error make --unspanned { msg: "required query parameter 'format' missing: pass --format" } }
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/export") $qp $auth.query)
   let req_body = {"catalogCategoryFilter": $catalog_category_filter, "channelCategoryFilter": $channel_category_filter, "criteria": $criteria, "overridden": $overridden, "pageNumber": $page_number, "pageSize": $page_size, "productFilters": $product_filters} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5390,14 +5489,14 @@ export def "get-channel-catalog-product-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<productExists: bool, productId: string, productImageUrl: string, productSku: string, productTitle: string, disabled: bool, excluded: bool, excludedBy: list<string>, links: record<disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, override: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, overrides: record, uncategorized: bool> {
+]: nothing -> oneof<record<productExists: bool, productId: string, productImageUrl: string, productSku: string, productTitle: string, disabled: bool, excluded: bool, excludedBy: list<string>, links: record<disable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, override: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, reenable: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, overrides: record, uncategorized: bool>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5435,7 +5534,7 @@ export def "disable-channel-catalog-product" [
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/disable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5475,9 +5574,9 @@ export def "override-channel-catalog-product-values" [
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5515,7 +5614,7 @@ export def "get-channel-catalog-product-value-override-copy" [
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/copy") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5553,7 +5652,7 @@ export def "configure-channel-catalog-product-value-override-copy" [
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/copy") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5593,7 +5692,7 @@ export def "delete-channel-catalog-product-value-override" [
   if ($channel_column_id | is-empty) { error make --unspanned { msg: "path parameter 'channelColumnId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id), channel_column_id: (encode-path-segment $channel_column_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/overrides/{channel_column_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -5631,7 +5730,7 @@ export def "reenable-channel-catalog-product" [
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id), product_id: (encode-path-segment $product_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/products/{product_id}/reenable") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -5670,9 +5769,9 @@ export def "configure-channel-catalog-cost-settings" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/settings/cost") $auth.query)
   let req_body = {"costType": $cost_type, "globalCostValue": $global_cost_value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5712,9 +5811,12 @@ export def "configure-channel-catalog-general-settings" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/channelCatalogs/{channel_catalog_id}/settings/general") $auth.query)
   let req_body = {"acceptToPublishInfo": $accept_to_publish_info, "activeBeezUPTracking": $active_beez_up_tracking, "doNotExportOutOfStockProducts": $do_not_export_out_of_stock_products} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "acceptToPublishInfo") == null) { error make --unspanned { msg: "required body field 'acceptToPublishInfo' missing: pass --accept-to-publish-info or pipe a record" } }
+  if (($req_body | get -o "activeBeezUPTracking") == null) { error make --unspanned { msg: "required body field 'activeBeezUPTracking' missing: pass --active-beez-up-tracking or pipe a record" } }
+  if (($req_body | get -o "doNotExportOutOfStockProducts") == null) { error make --unspanned { msg: "required body field 'doNotExportOutOfStockProducts' missing: pass --do-not-export-out-of-stock-products or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -5743,14 +5845,15 @@ export def "get-available-channels" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --store-id: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
-]: nothing -> table<channelId: string, channelLogoUrl: string, channelName: string, links: record<self: record>, types: list<string>> {
+  --store-id: string # The store identifier (required, format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
+]: nothing -> oneof<table<channelId: string, channelLogoUrl: string, channelName: string, links: record<self: record>, types: list<string>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($store_id == null) { error make --unspanned { msg: "required query parameter 'storeId' missing: pass --store-id" } }
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/channels/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5780,13 +5883,13 @@ export def "get-channel-info" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<beezUPOffer: string, channelDescription: string, channelId: string, channelLogoUrl: string, channelName: string, details: record<businessModel: string, category: string, channelType: string, costs: string, homeUrl: string, subscriptionLink: string, trackingType: string>, keyNumbers: record<categories: string, products: string, stores: string, viewsPerMonth: string>, salesContact: record<email: string, name: string, phoneNumber: string>, technicalContact: record<email: string, name: string, phoneNumber: string>> {
+]: nothing -> oneof<record<beezUPOffer: string, channelDescription: string, channelId: string, channelLogoUrl: string, channelName: string, details: record<businessModel: string, category: string, channelType: string, costs: string, homeUrl: string, subscriptionLink: string, trackingType: string>, keyNumbers: record<categories: string, products: string, stores: string, viewsPerMonth: string>, salesContact: record<email: string, name: string, phoneNumber: string>, technicalContact: record<email: string, name: string, phoneNumber: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -5816,16 +5919,17 @@ export def "get-channel-categories" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-encoding: list<string> # Indicates that the client accepts that the response will be compressed to reduce traffic size.
-]: nothing -> record<firstLevelCategories: table<channelCategoryChannelCode: string, channelCategoryColumnOverrides: record, channelCategoryDefaultCost: float, channelCategoryId: string, channelCategoryLevel: int, channelCategoryName: string, subCategories: list>> {
+  --accept-encoding: list<string> # Indicates that the client accepts that the response will be compressed to reduce traffic size. (required)
+]: nothing -> oneof<record<firstLevelCategories: table<channelCategoryChannelCode: string, channelCategoryColumnOverrides: record, channelCategoryDefaultCost: float, channelCategoryId: string, channelCategoryLevel: int, channelCategoryName: string, subCategories: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
+  if ($accept_encoding == null) { error make --unspanned { msg: "required header parameter 'Accept-Encoding' missing: pass --accept-encoding" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}/categories") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding })} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | compact | each { into string } | str join "," } else { $accept_encoding })} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5855,20 +5959,21 @@ export def "get-channel-columns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-encoding: list<string> # Indicates that the client accepts that the response will be compressed to reduce traffic size.
+  --accept-encoding: list<string> # Indicates that the client accepts that the response will be compressed to reduce traffic size. (required)
   --body: list
-]: any -> table<channelColumnDescription: string, channelColumnId: string, channelColumnName: string, configuration: record<beezUPColumnName: string, columnDataType: string, columnImportance: string>, position: int, restrictedValues: record, showInMapping: bool> {
+]: any -> oneof<table<channelColumnDescription: string, channelColumnId: string, channelColumnName: string, configuration: record<beezUPColumnName: string, columnDataType: string, columnImportance: string>, position: int, restrictedValues: record, showInMapping: bool>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
+  if ($accept_encoding == null) { error make --unspanned { msg: "required header parameter 'Accept-Encoding' missing: pass --accept-encoding" } }
   let full_url = (build-url $base ({channel_id: (encode-path-segment $channel_id)} | format pattern "/v2/user/channels/{channel_id}/columns") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding })} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | compact | each { into string } | str join "," } else { $accept_encoding })} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5898,14 +6003,14 @@ export def "get-customer-index" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<links: record<accountInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, billingPeriods: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, contracts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, friendInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getOffer: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, invoices: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, logout: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, standardOffers: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, stores: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<activeOfferLov: record<href: string, method: string>, beezUPTimeZoneLov: record<href: string, method: string>, contractTerminationReasonLov: record<href: string, method: string>, countryLov: record<href: string, method: string>, customerStatusLov: record<href: string, method: string>, invoicePaymentStatusLov: record<href: string, method: string>, offerLov: record<href: string, method: string>, storeCountryLov: record<href: string, method: string>, storeSectorLov: record<href: string, method: string>>> {
+]: nothing -> oneof<record<links: record<accountInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, billingPeriods: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, contracts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, friendInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getOffer: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, invoices: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, logout: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, standardOffers: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, stores: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<activeOfferLov: record<href: string, method: string>, beezUPTimeZoneLov: record<href: string, method: string>, contractTerminationReasonLov: record<href: string, method: string>, countryLov: record<href: string, method: string>, customerStatusLov: record<href: string, method: string>, invoicePaymentStatusLov: record<href: string, method: string>, offerLov: record<href: string, method: string>, storeCountryLov: record<href: string, method: string>, storeSectorLov: record<href: string, method: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5935,14 +6040,14 @@ export def "get-user-account-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<commercialOwnerEmail: string, companyInfo: record<accountingEmails: list<string>, address: string, city: string, company: string, countryIsoCodeAlpha3: string, postalCode: string, vatNumber: string>, email: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<activateUserAccount: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, changeEmail: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, changePassword: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getProfilePictureInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveCompanyInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, savePersonalInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveProfilePictureInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, personalInfo: record<beezUPTimeZoneId: int, firstName: string, lastName: string, phoneNumber: string, whatIDo: string>, profilePictureUrl: string, status: string, userId: string> {
+]: nothing -> oneof<record<commercialOwnerEmail: string, companyInfo: record<accountingEmails: list<string>, address: string, city: string, company: string, countryIsoCodeAlpha3: string, postalCode: string, vatNumber: string>, email: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<activateUserAccount: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, changeEmail: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, changePassword: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, getProfilePictureInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveCompanyInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, savePersonalInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, saveProfilePictureInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, personalInfo: record<beezUPTimeZoneId: int, firstName: string, lastName: string, phoneNumber: string, whatIDo: string>, profilePictureUrl: string, status: string, userId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5978,9 +6083,9 @@ export def "activate-user-account" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/activate" $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6016,9 +6121,9 @@ export def "change-email" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/changeEmail" $auth.query)
   let req_body = {"newEmail": $new_email} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6055,9 +6160,9 @@ export def "change-password" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/changePassword" $auth.query)
   let req_body = {"newPassword": $new_password, "oldPassword": $old_password} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6099,9 +6204,9 @@ export def "save-company-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/companyInfo" $auth.query)
   let req_body = {"accountingEmails": $accounting_emails, "address": $address, "city": $city, "company": $company, "countryIsoCodeAlpha3": $country_iso_code_alpha3, "postalCode": $postal_code, "vatNumber": $vat_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6131,14 +6236,14 @@ export def "get-credit-card-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<creditCardInfo: record<cardNumber: string, cardType: string, expirationMonth: int, expirationYear: int>, currentPaymentMethod: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<saveCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<creditCardInfo: record<cardNumber: string, cardType: string, expirationMonth: int, expirationYear: int>, currentPaymentMethod: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<saveCreditCardInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/creditCardInfo" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6177,9 +6282,9 @@ export def "save-credit-card-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/creditCardInfo" $auth.query)
   let req_body = {"cardNumber": $card_number, "cardVerificationCode": $card_verification_code, "expirationMonth": $expiration_month, "expirationYear": $expiration_year} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6219,9 +6324,9 @@ export def "save-personal-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/personalInfo" $auth.query)
   let req_body = {"beezUPTimeZoneId": $beez_up_time_zone_id, "firstName": $first_name, "lastName": $last_name, "phoneNumber": $phone_number, "whatIDo": $what_i_do} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6251,14 +6356,14 @@ export def "get-profile-picture-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, profilePictureInfo: record<profilePictureSelected: string, profilePictureUrl: string, gravatarProfilePictureUrl: string, initialsProfilePictureUrl: string>> {
+]: nothing -> oneof<record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, profilePictureInfo: record<profilePictureSelected: string, profilePictureUrl: string, gravatarProfilePictureUrl: string, initialsProfilePictureUrl: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/profilePictureInfo" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6295,9 +6400,9 @@ export def "save-profile-picture-info" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/profilePictureInfo" $auth.query)
   let req_body = {"profilePictureSelected": $profile_picture_selected, "profilePictureUrl": $profile_picture_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -6331,7 +6436,7 @@ export def "resend-email-activation" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/account/resendEmailActivation" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6361,14 +6466,14 @@ export def "get-billing-periods" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<billingPeriods: table<billingPeriodInMonth: int, discountPercentage: float>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<billingPeriods: table<billingPeriodInMonth: int, discountPercentage: float>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/billingPeriods" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6398,14 +6503,14 @@ export def "get-contracts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<current: record<additionalClickPrice: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float, clickIncluded: int, commitmentCalculatedFinishUtcDate: string, commitmentPeriodInMonth: int, contractId: string, currencyCode: string, discountDurationInMonth: int, discountEndUtcDate: string, fixedAndVariableClickInfo: record<clickIncludedAndAdditionalClickPrices: list>, fixedPrice: float, ipUserCreation: string, ipUserModification: string, isCommitmentRenewalAutomatically: bool, isModifiableContract: bool, offerId: int, offerName: string, percentDiscount: float, startUtcDate: string, storeCount: int, trialPeriodInMonth: int, variableModelInfo: record<clickIncludedAndVariablePrices: list, overflowClickCount: int, overflowClickPrice: float>, links: record<disable: record, reenable: record>>, links: record<create: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, next: record<additionalClickPrice: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float, clickIncluded: int, commitmentCalculatedFinishUtcDate: string, commitmentPeriodInMonth: int, contractId: string, currencyCode: string, discountDurationInMonth: int, discountEndUtcDate: string, fixedAndVariableClickInfo: record<clickIncludedAndAdditionalClickPrices: list>, fixedPrice: float, ipUserCreation: string, ipUserModification: string, isCommitmentRenewalAutomatically: bool, isModifiableContract: bool, offerId: int, offerName: string, percentDiscount: float, startUtcDate: string, storeCount: int, trialPeriodInMonth: int, variableModelInfo: record<clickIncludedAndVariablePrices: list, overflowClickCount: int, overflowClickPrice: float>, links: record<delete: record>>> {
+]: nothing -> oneof<record<current: record<additionalClickPrice: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float, clickIncluded: int, commitmentCalculatedFinishUtcDate: string, commitmentPeriodInMonth: int, contractId: string, currencyCode: string, discountDurationInMonth: int, discountEndUtcDate: string, fixedAndVariableClickInfo: record<clickIncludedAndAdditionalClickPrices: list>, fixedPrice: float, ipUserCreation: string, ipUserModification: string, isCommitmentRenewalAutomatically: bool, isModifiableContract: bool, offerId: int, offerName: string, percentDiscount: float, startUtcDate: string, storeCount: int, trialPeriodInMonth: int, variableModelInfo: record<clickIncludedAndVariablePrices: list, overflowClickCount: int, overflowClickPrice: float>, links: record<disable: record, reenable: record>>, links: record<create: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, next: record<additionalClickPrice: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float, clickIncluded: int, commitmentCalculatedFinishUtcDate: string, commitmentPeriodInMonth: int, contractId: string, currencyCode: string, discountDurationInMonth: int, discountEndUtcDate: string, fixedAndVariableClickInfo: record<clickIncludedAndAdditionalClickPrices: list>, fixedPrice: float, ipUserCreation: string, ipUserModification: string, isCommitmentRenewalAutomatically: bool, isModifiableContract: bool, offerId: int, offerName: string, percentDiscount: float, startUtcDate: string, storeCount: int, trialPeriodInMonth: int, variableModelInfo: record<clickIncludedAndVariablePrices: list, overflowClickCount: int, overflowClickPrice: float>, links: record<delete: record>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/contracts" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6439,15 +6544,15 @@ export def "create-contract" [
   --coupon-offer-code: string # Your special coupon offer identifier (format: guid, e.g. 04efc310-bc25-4710-a83a-faf200284fe5)
   offer_id: int # The offer id based on /offers. Not a free offer of course. (format: int32, e.g. 1)
   store_count: int # The store count you want to have in your contract. (format: int32, e.g. 1)
-]: any -> record<info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<contracts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: any -> oneof<record<info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<contracts: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/contracts" $auth.query)
   let req_body = {"billingPeriodInMonth": $billing_period_in_month, "couponDiscountCode": $coupon_discount_code, "couponOfferCode": $coupon_offer_code, "offerId": $offer_id, "storeCount": $store_count} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6484,9 +6589,9 @@ export def "terminate-current-contract" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/contracts/current/disableAutoRenewal" $auth.query)
   let req_body = {"contractTerminationReason": $contract_termination_reason, "contractTerminationReasonType": $contract_termination_reason_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6520,7 +6625,7 @@ export def "reactivate-current-contract" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/contracts/current/reenableAutoRenewal" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6554,7 +6659,7 @@ export def "delete-next-contract" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/contracts/next" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6585,15 +6690,15 @@ export def "get-friend-info" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<company: string, countryIsoCodeAlpha3: string, email: string, firstName: string, lastName: string, profilePictureUrl: string, userId: string, whatIDo: string> {
+]: nothing -> oneof<record<company: string, countryIsoCodeAlpha3: string, email: string, firstName: string, lastName: string, profilePictureUrl: string, userId: string, whatIDo: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/v2/user/customer/friends/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6623,14 +6728,14 @@ export def "get-invoices" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<invoices: table<amount: float, amountToBePaid: float, contractId: string, currencyCode: string, dueDate: string, invoiceDate: string, invoiceNumber: string, invoiceUrl: string, paymentStatus: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<invoices: table<amount: float, amountToBePaid: float, contractId: string, currencyCode: string, dueDate: string, invoiceDate: string, invoiceNumber: string, invoiceUrl: string, paymentStatus: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/invoices" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6660,14 +6765,14 @@ export def "get-standard-offers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<functionalities: table<code: string, order: int>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, offers: table<additionalClickPrice: float, currencyCode: string, fixedPrice: float, functionalities: list, includedClick: int, isMostPopular: bool, isOldOffer: bool, links: record, name: string, offerId: int, position: int>> {
+]: nothing -> oneof<record<functionalities: table<code: string, order: int>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, offers: table<additionalClickPrice: float, currencyCode: string, fixedPrice: float, functionalities: list, includedClick: int, isMostPopular: bool, isOldOffer: bool, links: record, name: string, offerId: int, position: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/offers" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6701,15 +6806,15 @@ export def "get-offer" [
   --coupon-offer-code: string # Your special coupon offer identifier (format: guid, e.g. 04efc310-bc25-4710-a83a-faf200284fe5)
   offer_id: int # The offer id based on /offers. Not a free offer of course. (format: int32, e.g. 1)
   store_count: int # The store count you want to have in your contract. (format: int32, e.g. 1)
-]: any -> record<content: record<contractBillingPeriodInfo: record<amountBillingPeriodDiscount: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float>, contractBonusInfo: record<bonuses: list>, contractClickInfo: record<additionalClickPrice: float, clickIncluded: int, initialOfferClickIncluded: int>, contractCommitmentInfo: record<commercialCreatorUserId: string, commercialUserId: string, commitmentCalculatedFinishDate: string, commitmentPeriodInMonth: int, contractType: int, couponOfferCode: string, currentContractId: string, currentContractTerminationDate: string, currentCustomerPaymentMethod: string, fixedAndVariableClickInfo: record, isCustomerWantsToTerminateHisContract: bool, isModelMustBeTransmittedInNewContract: bool, minBillingPeriodInMonths: int, model: string, newContractStartDate: string, offerId: int, offerName: string, paymentDelayInDays: int, paymentMethodAuthorized: string, requestedPaymentMethod: string, trialPeriodFinishDate: string, trialPeriodInMonth: int, variableModelInfo: record>, contractDiscountInfo: record<amountCodePromoDiscount: float, amountCodePromoDiscountPerMonth: float, couponDiscountCode: string, couponDiscountId: int, customerHasActualDiscount: bool, discountDurationInMonth: int, isCouponDiscountLinkedToCouponOffer: bool, percentDiscount: float, promotionalCodeValidity: string>, contractMoneyInfo: record<amountExcludingTaxesAndExcludingCodePromoDiscountIncludingBillingPeriodDiscount: float, amountExcludingTaxesAndExcludingDiscounts: float, amountExcludingTaxesIncludingDiscounts: float, amountExcludingTaxesIncludingDiscountsPerMonth: float, amountIncludingTaxesExcludingDiscountIncludingBillingPeriodDiscount: float, amountIncludingTaxesIncludingDiscounts: float, amountTaxesExcludingDiscountIncludingBillingPeriodDiscount: float, amountTaxesIncludingDiscounts: float, currencyCode: string, initialOfferFixedPrice: float, vatPercent: float>, contractStoreInfo: record<additionalStorePrice: float, maxStoreCount: int, minStoreCount: int, ownedStoreCount: int, storeCount: int, storeIncluded: int>, contractTerminationReason: string, contractTerminationReasonType: int, notifyVatExemption: bool, previousFixPeriodInvoiceProrataInfo: record<amountAfterTax: float, amountToBePaid: float, computedProrataToBeDeducted: float, contractId: string, fixedPeriodEndDate: string, fixedPeriodStartDate: string, invoiceNumber: string>>, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<createContract: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: any -> oneof<record<content: record<contractBillingPeriodInfo: record<amountBillingPeriodDiscount: float, billingPeriodInMonth: int, billingPeriodPercentDiscount: float>, contractBonusInfo: record<bonuses: list>, contractClickInfo: record<additionalClickPrice: float, clickIncluded: int, initialOfferClickIncluded: int>, contractCommitmentInfo: record<commercialCreatorUserId: string, commercialUserId: string, commitmentCalculatedFinishDate: string, commitmentPeriodInMonth: int, contractType: int, couponOfferCode: string, currentContractId: string, currentContractTerminationDate: string, currentCustomerPaymentMethod: string, fixedAndVariableClickInfo: record, isCustomerWantsToTerminateHisContract: bool, isModelMustBeTransmittedInNewContract: bool, minBillingPeriodInMonths: int, model: string, newContractStartDate: string, offerId: int, offerName: string, paymentDelayInDays: int, paymentMethodAuthorized: string, requestedPaymentMethod: string, trialPeriodFinishDate: string, trialPeriodInMonth: int, variableModelInfo: record>, contractDiscountInfo: record<amountCodePromoDiscount: float, amountCodePromoDiscountPerMonth: float, couponDiscountCode: string, couponDiscountId: int, customerHasActualDiscount: bool, discountDurationInMonth: int, isCouponDiscountLinkedToCouponOffer: bool, percentDiscount: float, promotionalCodeValidity: string>, contractMoneyInfo: record<amountExcludingTaxesAndExcludingCodePromoDiscountIncludingBillingPeriodDiscount: float, amountExcludingTaxesAndExcludingDiscounts: float, amountExcludingTaxesIncludingDiscounts: float, amountExcludingTaxesIncludingDiscountsPerMonth: float, amountIncludingTaxesExcludingDiscountIncludingBillingPeriodDiscount: float, amountIncludingTaxesIncludingDiscounts: float, amountTaxesExcludingDiscountIncludingBillingPeriodDiscount: float, amountTaxesIncludingDiscounts: float, currencyCode: string, initialOfferFixedPrice: float, vatPercent: float>, contractStoreInfo: record<additionalStorePrice: float, maxStoreCount: int, minStoreCount: int, ownedStoreCount: int, storeCount: int, storeIncluded: int>, contractTerminationReason: string, contractTerminationReasonType: int, notifyVatExemption: bool, previousFixPeriodInvoiceProrataInfo: record<amountAfterTax: float, amountToBePaid: float, computedProrataToBeDeducted: float, contractId: string, fixedPeriodEndDate: string, fixedPeriodStartDate: string, invoiceNumber: string>>, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<createContract: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/offers" $auth.query)
   let req_body = {"billingPeriodInMonth": $billing_period_in_month, "couponDiscountCode": $coupon_discount_code, "couponOfferCode": $coupon_offer_code, "offerId": $offer_id, "storeCount": $store_count} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6743,7 +6848,7 @@ export def "logout" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/security/logout" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6773,14 +6878,14 @@ export def "get-stores" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<links: record<createStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, stores: table<countryIsoCodeAlpha3: string, creationUtcDate: string, currencyCode: string, goVersion: int, isTest: bool, links: record, name: string, offerId: int, offerName: string, ownerUserId: string, sectors: list, shareCount: int, status: string, storeId: string, url: string, userRole: string>> {
+]: nothing -> oneof<record<links: record<createStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, stores: table<countryIsoCodeAlpha3: string, creationUtcDate: string, currencyCode: string, goVersion: int, isTest: bool, links: record, name: string, offerId: int, offerName: string, ownerUserId: string, sectors: list, shareCount: int, status: string, storeId: string, url: string, userRole: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/stores" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6814,15 +6919,15 @@ export def "create-store" [
   name: string # The store name. Must be unique. (e.g. My Store)
   sectors: list<string> # The store's sectors based on the list of values /user/lov/ParamSector (e.g. [ANIMALERIE, AUTOMOTO])
   url: string # The url of your store (e.g. http://www.mystore.com)
-]: any -> record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool> {
+]: any -> oneof<record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/stores" $auth.query)
   let req_body = {"countryIsoCodeAlpha3": $country_iso_code_alpha3, "id": $id, "name": $name, "sectors": $sectors, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -6858,7 +6963,7 @@ export def "delete-store" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -6889,15 +6994,15 @@ export def "get-store" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<countryIsoCodeAlpha3: string, creationUtcDate: string, currencyCode: string, goVersion: int, isTest: bool, links: record<deleteStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, share: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, shares: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, updateStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, name: string, offerId: int, offerName: string, ownerUserId: string, sectors: list<string>, shareCount: int, status: string, storeId: string, url: string, userRole: string> {
+]: nothing -> oneof<record<countryIsoCodeAlpha3: string, creationUtcDate: string, currencyCode: string, goVersion: int, isTest: bool, links: record<deleteStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, share: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, shares: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, updateStore: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, name: string, offerId: int, offerName: string, ownerUserId: string, sectors: list<string>, shareCount: int, status: string, storeId: string, url: string, userRole: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6937,9 +7042,9 @@ export def "update-store" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}") $auth.query)
   let req_body = {"name": $name, "sectors": $sectors, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "patch"
     url: $full_url
@@ -6970,15 +7075,15 @@ export def "get-store-alerts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<alerts: table<alertId: int, alertName: string, enabled: bool, links: record, properties: list>> {
+]: nothing -> oneof<record<alerts: table<alertId: int, alertName: string, enabled: bool, links: record, properties: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/alerts") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7016,9 +7121,9 @@ export def "save-store-alerts" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/alerts") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7048,13 +7153,13 @@ export def "get-rights" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<functionalityCode: string, maxValueInterger: int, unlimited: bool> {
+]: nothing -> oneof<table<functionalityCode: string, maxValueInterger: int, unlimited: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/rights") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7085,15 +7190,15 @@ export def "get-store-shares" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, share: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, shares: table<links: record, userId: string, userRole: string>> {
+]: nothing -> oneof<record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, share: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, shares: table<links: record, userId: string, userRole: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7131,9 +7236,9 @@ export def "share-store" [
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares") $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7171,7 +7276,7 @@ export def "delete-store-share" [
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({store_id: (encode-path-segment $store_id), user_id: (encode-path-segment $user_id)} | format pattern "/v2/user/customer/stores/{store_id}/shares/{user_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -7200,12 +7305,12 @@ export def "zendesk-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<token: string> {
+]: nothing -> oneof<record<token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/customer/zendeskToken" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7235,13 +7340,13 @@ export def "get-legacy-tracking-channel-catalogs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # The store identifier (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
-]: nothing -> record<channelCatalogs: record, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<channelCatalogs: record, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/legacyTracking/channelCatalogs/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7271,13 +7376,13 @@ export def "get-legacy-tracking-channel-catalog" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<migrate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<links: record<migrate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/legacyTracking/channelCatalogs/{channel_catalog_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7313,7 +7418,7 @@ export def "migrate-legacy-tracking-channel-catalog" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/legacyTracking/channelCatalogs/{channel_catalog_id}/migrate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7342,12 +7447,12 @@ export def "get-user-lov-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<lists: record, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<links: record<lists: record, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/lov/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7379,15 +7484,15 @@ export def "get-user-list-of-values" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: list<string> # Indicates that the client accepts the following languages.
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<items: table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<items: table<codeIdentifier: string, intIdentifier: int, position: int, translationText: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($list_name | is-empty) { error make --unspanned { msg: "path parameter 'listName' must be non-empty" } }
   let full_url = (build-url $base ({list_name: (encode-path-segment $list_name)} | format pattern "/v2/user/lov/{list_name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | each { into string } | str join "," } else { $accept_language }), "If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | compact | each { into string } | str join "," } else { $accept_language }), "If-None-Match": $if_none_match} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7417,13 +7522,13 @@ export def "get-marketplace-channel-catalogs" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
-]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, marketplaceChannelCatalogs: table<apiSettingsStatus: string, beezUPChannelCatalogId: string, beezUPChannelId: string, beezUPMarketplaceName: any, beezUPStoreId: string, beezUPStoreName: string, enabled: bool, links: record, lovLinks: record, marketplaceAccountId: int, marketplaceBusinessCode: string, marketplaceIsoCountryCodeAlpha2: string, marketplaceMarketPlaceId: string, marketplaceMerchantIdentifiers: record, marketplaceTechnicalCode: string>> {
+]: nothing -> oneof<record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, marketplaceChannelCatalogs: table<apiSettingsStatus: string, beezUPChannelCatalogId: string, beezUPChannelId: string, beezUPMarketplaceName: any, beezUPStoreId: string, beezUPStoreName: string, enabled: bool, links: record, lovLinks: record, marketplaceAccountId: int, marketplaceBusinessCode: string, marketplaceIsoCountryCodeAlpha2: string, marketplaceMarketPlaceId: string, marketplaceMerchantIdentifiers: record, marketplaceTechnicalCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/channelcatalogs/" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7456,16 +7561,17 @@ export def "get-publications" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --channel-catalog-id: string # Channel Catalog Id by which to filter (optional) (format: guid)
   --count: int # Amount of entries to fetch (optional, default set to 10) (format: int32, default: 10)
-  --publication-types: list<string> # Publication types by which to filter (optional)
-]: nothing -> record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, publications: table<feeds: list, publicationType: string>> {
+  --publication-types: list<string> # Publication types by which to filter (optional) (required)
+]: nothing -> oneof<record<links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, publications: table<feeds: list, publicationType: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
+  if ($publication_types == null) { error make --unspanned { msg: "required query parameter 'publicationTypes' missing: pass --publication-types" } }
   let qp = [(serialize-qp "channelCatalogId" $channel_catalog_id "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "publicationTypes" $publication_types "csv")] | flatten | str join "&"
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/publications/{marketplace_technical_code}/{account_id}/history") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7507,9 +7613,10 @@ export def "publish-catalog-to-marketplace" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/publications/{marketplace_technical_code}/{account_id}/publish") $auth.query)
   let req_body = {"feedType": $feed_type, "publicationStrategyKind": $publication_strategy_kind, "withUnpublish": $with_unpublish} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "withUnpublish") == null) { error make --unspanned { msg: "required body field 'withUnpublish' missing: pass --with-unpublish or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7539,18 +7646,19 @@ export def "get-channel-catalog-marketplace-properties" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --redirection-page-url: string # format: uri
+  --redirection-page-url: string # required, format: uri
   --accept-language: list<string> # Indicates that the client accepts the following languages.
-]: nothing -> record<info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<externalConfigurationPage: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, settings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, propertyGroups: table<name: string, position: int, properties: list>> {
+]: nothing -> oneof<record<info: record<errors: list<record>, informations: list<record>, successes: list<record>, warnings: list<record>>, links: record<externalConfigurationPage: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, settings: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, propertyGroups: table<name: string, position: int, properties: list>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
+  if ($redirection_page_url == null) { error make --unspanned { msg: "required query parameter 'redirectionPageUrl' missing: pass --redirection-page-url" } }
   let qp = [(serialize-qp "redirectionPageUrl" $redirection_page_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/properties") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | each { into string } | str join "," } else { $accept_language })} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Language": (if ($accept_language | describe | str starts-with "list") { $accept_language | compact | each { into string } | str join "," } else { $accept_language })} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7580,13 +7688,13 @@ export def "get-channel-catalog-marketplace-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, settings: table<discriminatorType: string, name: string>> {
+]: nothing -> oneof<record<links: record<save: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, settings: table<discriminatorType: string, name: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/settings") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -7605,7 +7713,6 @@ export def "get-channel-catalog-marketplace-settings" [
 #
 # POST /v2/user/marketplaces/channelcatalogs/{channelCatalogId}/settings
 # operationId: SetChannelCatalogMarketplaceSettings
-# --settings item shape: {discriminatorType: "channelCatalogMarketplaceStringSetting"|"channelCatalogMarketplaceIntegerSetting"|"channelCatalogMarketplaceBooleanSetting"|"channelCatalogMarketplaceNumberSetting", name: string}
 export def "set-channel-catalog-marketplace-settings" [
   channel_catalog_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7625,9 +7732,9 @@ export def "set-channel-catalog-marketplace-settings" [
   if ($channel_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'channelCatalogId' must be non-empty" } }
   let full_url = (build-url $base ({channel_catalog_id: (encode-path-segment $channel_catalog_id)} | format pattern "/v2/user/marketplaces/channelcatalogs/{channel_catalog_id}/settings") $auth.query)
   let req_body = {"settings": $settings} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7659,14 +7766,14 @@ export def "get-order-index" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<links: record<autoTransitions: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exportations: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, lightOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, orders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<orderChangeBusinessOperationType: record<href: string, method: string>, orderProperty: record<href: string, method: string>, orderPropertyPosted: record<href: string, method: string>, orderState: record<href: string, method: string>>> {
+]: nothing -> oneof<record<links: record<autoTransitions: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, exportations: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, lightOrders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, orders: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, lovLinks: record<orderChangeBusinessOperationType: record<href: string, method: string>, orderProperty: record<href: string, method: string>, orderPropertyPosted: record<href: string, method: string>, orderState: record<href: string, method: string>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7697,15 +7804,15 @@ export def "get-automatic-transitions" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<automaticTransitionInfos: table<accountId: int, enabled: bool, marketplaceTechnicalCode: string, orderStatusTransitionId: int, beezUPOrderStatus: string, businessOperationType: string, links: record, marketplaceBusinessCode: string>, links: record<configure: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>> {
+]: nothing -> oneof<record<automaticTransitionInfos: table<accountId: int, enabled: bool, marketplaceTechnicalCode: string, orderStatusTransitionId: int, beezUPOrderStatus: string, businessOperationType: string, links: record, marketplaceBusinessCode: string>, links: record<configure: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/automaticTransitions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7724,7 +7831,6 @@ export def "get-automatic-transitions" [
 #
 # POST /v2/user/marketplaces/orders/automaticTransitions
 # operationId: ConfigureAutomaticTransitions
-# --automaticTransitions item shape: {accountId: int, enabled: bool, marketplaceTechnicalCode: string, orderStatusTransitionId: int}
 export def "configure-automatic-transitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7742,9 +7848,9 @@ export def "configure-automatic-transitions" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/automaticTransitions" $auth.query)
   let req_body = {"automaticTransitions": $automatic_transitions} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7764,7 +7870,6 @@ export def "configure-automatic-transitions" [
 # POST /v2/user/marketplaces/orders/batches/changeOrders/{changeOrderType}
 # DEPRECATED
 # operationId: ChangeOrderList
-# --changeOrders item shape: {changeOrderRequest?: record, order: any}
 @deprecated
 export def "change-order-list" [
   change_order_type: string
@@ -7777,20 +7882,21 @@ export def "change-order-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login. (required)
   --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  change_orders: list # The change order operations — item shape: {changeOrderRequest?: record, order: any}
-]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
+  change_orders: list # The change order operations — item shape: {changeOrderRequest?: record, order: record}
+]: any -> oneof<record<operations: table<errors: list, order: record, status: int, success: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($change_order_type | is-empty) { error make --unspanned { msg: "path parameter 'changeOrderType' must be non-empty" } }
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({change_order_type: (encode-path-segment $change_order_type)} | format pattern "/v2/user/marketplaces/orders/batches/changeOrders/{change_order_type}") $qp $auth.query)
   let req_body = {"changeOrders": $change_orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7810,7 +7916,6 @@ export def "change-order-list" [
 # POST /v2/user/marketplaces/orders/batches/clearMerchantOrderInfos
 # DEPRECATED
 # operationId: ClearMerchantOrderInfoList
-# --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
 @deprecated
 export def "clear-merchant-order-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -7823,15 +7928,15 @@ export def "clear-merchant-order-info-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   orders: list # e.g. [{accountId: 1234, beezUPOrderId: 0, marketplaceTechnicalCode: Amazon}, {accountId: 5678, beezUPOrderId: 0, marketplaceTechnicalCode: Amazon}, {accountId: 9876, beezUPOrderId: 0, marketplaceTechnicalCode: Ebay}] — item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string}
-]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
+]: any -> oneof<record<operations: table<errors: list, order: record, status: int, success: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/batches/clearMerchantOrderInfos" $auth.query)
   let req_body = {"orders": $orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7851,7 +7956,6 @@ export def "clear-merchant-order-info-list" [
 # POST /v2/user/marketplaces/orders/batches/setMerchantOrderInfos
 # DEPRECATED
 # operationId: SetMerchantOrderInfoList
-# --orders item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
 @deprecated
 export def "set-merchant-order-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -7866,15 +7970,15 @@ export def "set-merchant-order-info-list" [
   order_merchant_e_commerce_software_name: string # The e-commerce software name of the merchant (e.g. Prestashop)
   order_merchant_e_commerce_software_version: string # The e-commece software version of the merchant (e.g. 123.0.1)
   orders: list # e.g. [{accountId: 1234, beezUPOrderId: 8D47FF1427A26B064ca98e95f644361ada5a5be0bbb3b53, marketplaceTechnicalCode: Amazon, order_MerchantOrderId: BX1234}, {accountId: 5678, beezUPOrderId: 8D47FF149F213D055f26e3c413e4c9ba5c5cfda460547a4, marketplaceTechnicalCode: Amazon, order_MerchantOrderId: BX5678}, {accountId: 9876, beezUPOrderId: 8D47FF150217B60bdec05ab61c445d1a59e3da050b52823, marketplaceTechnicalCode: Ebay, order_MerchantOrderId: BX9876}] — item shape: {accountId: int, beezUPOrderId: string, marketplaceTechnicalCode: string, order_MerchantOrderId: string}
-]: any -> record<operations: table<errors: list, order: record, status: int, success: bool>> {
+]: any -> oneof<record<operations: table<errors: list, order: record, status: int, success: bool>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/batches/setMerchantOrderInfos" $auth.query)
   let req_body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "orders": $orders} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7903,19 +8007,22 @@ export def "get-order-exportations" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --page-number: int # The page number you want to get (format: int32, e.g. 1)
-  --page-size: int # The entry count you want to get (format: int32, e.g. 25)
-  --store-id: string # The store identifier to regroup the order exportations (format: guid)
+  --page-number: int # The page number you want to get (required, format: int32, e.g. 1)
+  --page-size: int # The entry count you want to get (required, format: int32, e.g. 25)
+  --store-id: string # The store identifier to regroup the order exportations (required, format: guid)
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<exportations: table<abortionUtcDate: string, beginUtcDate: string, blobNameUri: string, endUtcDate: string, enqueuedUtcDate: string, errorMessage: string, executionUUID: string, expirationUtcDate: string, failureUtcDate: string, ipAddress: string, jsonCriteria: string, lastUpdateUtcDate: string, orderCount: int, processingStatus: string, remainingOrderCount: int, resumedUtcDate: string, sourceType: string, sourceUserId: string, sourceUserName: string, suspendedUtcDate: string, timeoutDuration: string, warningMessage: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+]: nothing -> oneof<record<exportations: table<abortionUtcDate: string, beginUtcDate: string, blobNameUri: string, endUtcDate: string, enqueuedUtcDate: string, errorMessage: string, executionUUID: string, expirationUtcDate: string, failureUtcDate: string, ipAddress: string, jsonCriteria: string, lastUpdateUtcDate: string, orderCount: int, processingStatus: string, remainingOrderCount: int, resumedUtcDate: string, sourceType: string, sourceUserId: string, sourceUserName: string, suspendedUtcDate: string, timeoutDuration: string, warningMessage: string>, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($page_number == null) { error make --unspanned { msg: "required query parameter 'pageNumber' missing: pass --page-number" } }
+  if ($page_size == null) { error make --unspanned { msg: "required query parameter 'pageSize' missing: pass --page-size" } }
+  if ($store_id == null) { error make --unspanned { msg: "required query parameter 'storeId' missing: pass --store-id" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/exportations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7934,7 +8041,6 @@ export def "get-order-exportations" [
 #
 # POST /v2/user/marketplaces/orders/exportations
 # operationId: ExportOrders
-# --orderListRequestWithoutPagination shape: {accountIds?: list<int>, beezUPOrderStatuses?: list<string>, beginPeriodUtcDate: string, dateSearchType?: "Modification"|"Purchase"|"MarketPlaceModification", endPeriodUtcDate: string, invoiceAvailabilityType?: string, marketplaceBusinessCodes?: list<string>, marketplaceOrderIds?: list<string>, marketplaceTechnicalCodes?: list<string>, orderMerchantInfoSynchronizationStatus?: string, order_Buyer_Name?: string, order_MerchantOrderIds?: list<string>, storeIds?: list<string>}
 export def "export-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7954,9 +8060,9 @@ export def "export-orders" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/exportations" $auth.query)
   let req_body = {"format": $format, "orderListRequestWithoutPagination": $order_list_request_without_pagination, "storeId": $store_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -7994,7 +8100,7 @@ export def "harvest-all" [
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/harvest" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8023,18 +8129,19 @@ export def "generate-batch-order-invoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login. (required)
   --body: list
-]: any -> table<accountId: int, beezUPOrderUUID: string, invoiceLocation: string, invoiceSequenceNumber: int, marketplaceTechnicalCode: string> {
+]: any -> oneof<table<accountId: int, beezUPOrderUUID: string, invoiceLocation: string, invoiceSequenceNumber: int, marketplaceTechnicalCode: string>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
   let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/generate" $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else if (($input | is-not-empty) and ($req_body | is-empty)) { $input } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "scalar")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8063,6 +8170,7 @@ export def "get-order-invoice-pdf" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
+  --accept: string@accept-completer # Response content type
   order_invoice_uri: string # order invoice url (e.g. http://www.mydomain.com)
 ]: any -> oneof<string, record, nothing> {
   let input = $in
@@ -8070,9 +8178,9 @@ export def "get-order-invoice-pdf" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/getPdfInvoice" $auth.query)
   let req_body = {"orderInvoiceUri": $order_invoice_uri} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
-  let accept_val = "application/pdf"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let req_body = (merge-body-input $input $req_body "record")
+  let accept_val = ($accept | default "application/pdf")
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8101,12 +8209,12 @@ export def "get-order-invoice-design-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<footerContentHtml: string, headerContentHtml: string> {
+]: nothing -> oneof<record<footerContentHtml: string, headerContentHtml: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8143,9 +8251,9 @@ export def "save-order-invoice-design-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design" $auth.query)
   let req_body = {"footerContentHtml": $footer_content_html, "headerContentHtml": $header_content_html} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8174,20 +8282,21 @@ export def "get-order-invoice-design-settings-preview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
+  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size (required)
   --footer-content-html: string # Footer Content HTML
   --header-content-html: string # Header Content HTML
-]: any -> record<invoiceHtmlContent: string> {
+]: any -> oneof<record<invoiceHtmlContent: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_encoding == null) { error make --unspanned { msg: "required header parameter 'Accept-Encoding' missing: pass --accept-encoding" } }
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/design/preview" $auth.query)
   let req_body = {"footerContentHtml": $footer_content_html, "headerContentHtml": $header_content_html} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8216,12 +8325,12 @@ export def "get-order-invoice-general-settings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<cultureName: string, invoicePrefix: string, invoiceStartingSequenceNumber: int, productVATPercent: float, shippingVATPercent: float, lastInvoiceSequenceNumber: int> {
+]: nothing -> oneof<record<cultureName: string, invoicePrefix: string, invoiceStartingSequenceNumber: int, productVATPercent: float, shippingVATPercent: float, lastInvoiceSequenceNumber: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/general" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8261,9 +8370,9 @@ export def "save-order-invoice-general-settings" [
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/invoices/settings/general" $auth.query)
   let req_body = {"cultureName": $culture_name, "invoicePrefix": $invoice_prefix, "invoiceStartingSequenceNumber": $invoice_starting_sequence_number, "productVATPercent": $product_vat_percent, "shippingVATPercent": $shipping_vat_percent} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "put"
     url: $full_url
@@ -8295,7 +8404,7 @@ export def "generate-order-invoice" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login. (required)
   --invoice-sequence-number: int # Invoice Sequence Number (e.g. 879)
 ]: any -> any {
   let input = $in
@@ -8304,12 +8413,13 @@ export def "generate-order-invoice" [
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_uuid | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderUUID' must be non-empty" } }
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
   let qp = [(serialize-qp "userName" $user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_uuid: (encode-path-segment $beez_up_order_uuid)} | format pattern "/v2/user/marketplaces/orders/invoices/{marketplace_technical_code}/{account_id}/{beez_up_order_uuid}/generate") $qp $auth.query)
   let req_body = {"invoiceSequenceNumber": $invoice_sequence_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8341,22 +8451,23 @@ export def "get-order-invoice-preview" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
+  --accept-encoding: string # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size (required)
   --invoice-sequence-number: int # Invoice Sequence Number (e.g. 879)
-]: any -> record<invoiceHtmlContent: string> {
+]: any -> oneof<record<invoiceHtmlContent: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_uuid | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderUUID' must be non-empty" } }
+  if ($accept_encoding == null) { error make --unspanned { msg: "required header parameter 'Accept-Encoding' missing: pass --accept-encoding" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_uuid: (encode-path-segment $beez_up_order_uuid)} | format pattern "/v2/user/marketplaces/orders/invoices/{marketplace_technical_code}/{account_id}/{beez_up_order_uuid}/preview") $auth.query)
   let req_body = {"invoiceSequenceNumber": $invoice_sequence_number} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Accept-Encoding": $accept_encoding} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8387,7 +8498,7 @@ export def "get-order-list-full" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --accept-encoding: list<string> # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size
+  --accept-encoding: list<string> # Allows the client to indicate wether it accepts a compressed encoding to reduce traffic size (required)
   --account-ids: list<int> # Account Id list (e.g. [12345])
   --beez-up-order-statuses: list<string> # e.g. [InProgress]
   begin_period_utc_date: string # The begin period you want to make the search. \ The period MUST not be greater than 62 days. The begin period MUST be lower than the end period. (format: date-time, e.g. 2017-03-01T13:10:01Z)
@@ -8403,17 +8514,18 @@ export def "get-order-list-full" [
   --store-ids: list<string> # Store Id list
   page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
   page_size: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
-]: any -> record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool, orderItems: list, order_Buyer_AddressCity: string, order_Buyer_AddressCountryIsoCodeAlpha2: string, order_Buyer_AddressCountryName: string, order_Buyer_AddressLine1: string, order_Buyer_AddressLine2: string, order_Buyer_AddressLine3: string, order_Buyer_AddressPostalCode: string, order_Buyer_AddressStateOrRegion: string, order_Buyer_Civility: string, order_Buyer_CompanyName: string, order_Buyer_Email: string, order_Buyer_FirstName: string, order_Buyer_Identifier: string, order_Buyer_LastName: string, order_Buyer_MobilePhone: string, order_Buyer_Phone: string, order_Comment: string, order_FulfilledBy: string, order_IsBusiness: bool, order_IsPrime: bool, order_MarketPlaceChannel: string, order_OrderItemsSourceUri: string, order_OrderSourceUri: string, order_PayingUtcDate: string, order_PaymentMethod: string, order_Shipping_AddressCity: string, order_Shipping_AddressCountryIsoCodeAlpha2: string, order_Shipping_AddressCountryName: string, order_Shipping_AddressLine1: string, order_Shipping_AddressLine2: string, order_Shipping_AddressLine3: string, order_Shipping_AddressName: string, order_Shipping_AddressPostalCode: string, order_Shipping_AddressStateOrRegion: string, order_Shipping_Civility: string, order_Shipping_CompanyName: string, order_Shipping_EarliestShipUtcDate: string, order_Shipping_Email: string, order_Shipping_FirstName: string, order_Shipping_LastName: string, order_Shipping_LatestShipUtcDate: string, order_Shipping_Method: string, order_Shipping_MobilePhone: string, order_Shipping_Phone: string, order_Shipping_Price: float, order_Shipping_ShippingTax: float, order_TotalCommission: float, order_TotalTax: float, transitionLinks: list>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+]: any -> oneof<record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool, orderItems: list, order_Buyer_AddressCity: string, order_Buyer_AddressCountryIsoCodeAlpha2: string, order_Buyer_AddressCountryName: string, order_Buyer_AddressLine1: string, order_Buyer_AddressLine2: string, order_Buyer_AddressLine3: string, order_Buyer_AddressPostalCode: string, order_Buyer_AddressStateOrRegion: string, order_Buyer_Civility: string, order_Buyer_CompanyName: string, order_Buyer_Email: string, order_Buyer_FirstName: string, order_Buyer_Identifier: string, order_Buyer_LastName: string, order_Buyer_MobilePhone: string, order_Buyer_Phone: string, order_Comment: string, order_FulfilledBy: string, order_IsBusiness: bool, order_IsPrime: bool, order_MarketPlaceChannel: string, order_OrderItemsSourceUri: string, order_OrderSourceUri: string, order_PayingUtcDate: string, order_PaymentMethod: string, order_Shipping_AddressCity: string, order_Shipping_AddressCountryIsoCodeAlpha2: string, order_Shipping_AddressCountryName: string, order_Shipping_AddressLine1: string, order_Shipping_AddressLine2: string, order_Shipping_AddressLine3: string, order_Shipping_AddressName: string, order_Shipping_AddressPostalCode: string, order_Shipping_AddressStateOrRegion: string, order_Shipping_Civility: string, order_Shipping_CompanyName: string, order_Shipping_EarliestShipUtcDate: string, order_Shipping_Email: string, order_Shipping_FirstName: string, order_Shipping_LastName: string, order_Shipping_LatestShipUtcDate: string, order_Shipping_Method: string, order_Shipping_MobilePhone: string, order_Shipping_Phone: string, order_Shipping_Price: float, order_Shipping_ShippingTax: float, order_TotalCommission: float, order_TotalTax: float, transitionLinks: list>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
+  if ($accept_encoding == null) { error make --unspanned { msg: "required header parameter 'Accept-Encoding' missing: pass --accept-encoding" } }
   let full_url = (build-url $base "/v2/user/marketplaces/orders/list/full" $auth.query)
   let req_body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | each { into string } | str join "," } else { $accept_encoding })} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Accept-Encoding": (if ($accept_encoding | describe | str starts-with "list") { $accept_encoding | compact | each { into string } | str join "," } else { $accept_encoding })} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8459,15 +8571,15 @@ export def "get-order-list-light" [
   --store-ids: list<string> # Store Id list
   page_number: int # Indicates the page number (format: int32, default: 1, e.g. 1)
   page_size: int # Indicate the order count per page (format: int32, default: 100, e.g. 100)
-]: any -> record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>> {
+]: any -> oneof<record<links: record<clearMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, export: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfos: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, status: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, orders: table<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool>, paginationResult: record<entryCount: int, links: record<first: record, last: record, next: record, previous: record>, pageCount: int, totalEntryCount: int>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/list/light" $auth.query)
   let req_body = {"accountIds": $account_ids, "beezUPOrderStatuses": $beez_up_order_statuses, "beginPeriodUtcDate": $begin_period_utc_date, "dateSearchType": $date_search_type, "endPeriodUtcDate": $end_period_utc_date, "invoiceAvailabilityType": $invoice_availability_type, "marketplaceBusinessCodes": $marketplace_business_codes, "marketplaceOrderIds": $marketplace_order_ids, "marketplaceTechnicalCodes": $marketplace_technical_codes, "orderMerchantInfoSynchronizationStatus": $order_merchant_info_synchronization_status, "order_Buyer_Name": $order_buyer_name, "order_MerchantOrderIds": $order_merchant_order_ids, "storeIds": $store_ids, "pageNumber": $page_number, "pageSize": $page_size} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8500,15 +8612,15 @@ export def "get-marketplace-accounts-synchronization" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # The StoreId to filter by (format: guid, e.g. 04730364-9826-4ff3-92e4-51fccd02bf10)
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<accountSynchronizations: table<accountId: int, completedHarvestSynchroUtcDate: string, marketplaceBusinessCode: string, marketplaceTechnicalCode: string>> {
+]: nothing -> oneof<record<accountSynchronizations: table<accountId: int, completedHarvestSynchroUtcDate: string, marketplaceBusinessCode: string, marketplaceTechnicalCode: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "storeId" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/user/marketplaces/orders/status" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8537,12 +8649,12 @@ export def "get-subscription-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> table<consumerHealthStatus: string, consumerLastRequestSentUri: string, consumerUnvailableSinceUtcDate: string, id: string, lastErrorMessage: record<errors: list>, lastOrderPushedModificationUtcDate: string, lastRetryUtcDate: string, lastSuccessfulOrderPushedUtcDate: string, maxRetryCount: int, merchantApplicationName: string, merchantApplicationVersion: string, merchantEmailAlert: string, name: string, nextScheduledRetryUtcDate: string, recoverBeginPeriodOrderLastModificationUtcDate: string, recoverEndPeriodOrderLastModificationUtcDate: string, retryCount: int, status: string, targetUrl: string, links: record<activate: record, deactivate: record, delete: record, reporting: record, retry: record>> {
+]: nothing -> oneof<table<consumerHealthStatus: string, consumerLastRequestSentUri: string, consumerUnvailableSinceUtcDate: string, id: string, lastErrorMessage: record<errors: list>, lastOrderPushedModificationUtcDate: string, lastRetryUtcDate: string, lastSuccessfulOrderPushedUtcDate: string, maxRetryCount: int, merchantApplicationName: string, merchantApplicationVersion: string, merchantEmailAlert: string, name: string, nextScheduledRetryUtcDate: string, recoverBeginPeriodOrderLastModificationUtcDate: string, recoverEndPeriodOrderLastModificationUtcDate: string, retryCount: int, status: string, targetUrl: string, links: record<activate: record, deactivate: record, delete: record, reporting: record, retry: record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/marketplaces/orders/subscriptions/" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8578,7 +8690,7 @@ export def "delete-subscription" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
@@ -8608,13 +8720,13 @@ export def "get-subscription" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> record<consumerHealthStatus: string, consumerLastRequestSentUri: string, consumerUnvailableSinceUtcDate: string, id: string, lastErrorMessage: record<errors: list<record>>, lastOrderPushedModificationUtcDate: string, lastRetryUtcDate: string, lastSuccessfulOrderPushedUtcDate: string, maxRetryCount: int, merchantApplicationName: string, merchantApplicationVersion: string, merchantEmailAlert: string, name: string, nextScheduledRetryUtcDate: string, recoverBeginPeriodOrderLastModificationUtcDate: string, recoverEndPeriodOrderLastModificationUtcDate: string, retryCount: int, status: string, targetUrl: string, links: record<activate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, deactivate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, reporting: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, retry: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>>> {
+]: nothing -> oneof<record<consumerHealthStatus: string, consumerLastRequestSentUri: string, consumerUnvailableSinceUtcDate: string, id: string, lastErrorMessage: record<errors: list<record>>, lastOrderPushedModificationUtcDate: string, lastRetryUtcDate: string, lastSuccessfulOrderPushedUtcDate: string, maxRetryCount: int, merchantApplicationName: string, merchantApplicationVersion: string, merchantEmailAlert: string, name: string, nextScheduledRetryUtcDate: string, recoverBeginPeriodOrderLastModificationUtcDate: string, recoverEndPeriodOrderLastModificationUtcDate: string, retryCount: int, status: string, targetUrl: string, links: record<activate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, deactivate: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, delete: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, reporting: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>, retry: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, rel: string, urlTemplated: bool>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8656,9 +8768,9 @@ export def "create-subscription" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}") $auth.query)
   let req_body = {"merchantApplicationName": $merchant_application_name, "merchantApplicationVersion": $merchant_application_version, "merchantEmailAlert": $merchant_email_alert, "name": $name, "targetUrl": $target_url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8697,9 +8809,9 @@ export def "activate-subscription" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/activate") $auth.query)
   let req_body = {"recoverBeginPeriodOrderLastModificationUtcDate": $recover_begin_period_order_last_modification_utc_date, "recoverEndPeriodOrderLastModificationUtcDate": $recover_end_period_order_last_modification_utc_date} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8735,7 +8847,7 @@ export def "deactivate-subscription" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/deactivate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8767,14 +8879,14 @@ export def "get-subscription-push-reporting" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-number: int # format: PageNumber
   --page-size: int # format: PageSize
-]: nothing -> table<duration: string, errorMessage: record<errors: list>, eventId: string, httpStatus: int, lastOrderModificationUtcDate: string, maxRetryCount: int, nextScheduledRetryUtcDate: string, orderCount: int, requestUri: string, responseUri: string, retryCount: int, subscriptionId: string, succeed: bool> {
+]: nothing -> oneof<table<duration: string, errorMessage: record<errors: list>, eventId: string, httpStatus: int, lastOrderModificationUtcDate: string, maxRetryCount: int, nextScheduledRetryUtcDate: string, orderCount: int, requestUri: string, responseUri: string, retryCount: int, subscriptionId: string, succeed: bool>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/reporting") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
@@ -8810,7 +8922,7 @@ export def "retry-push-orders" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/user/marketplaces/orders/subscriptions/{id}/retry") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8845,7 +8957,7 @@ export def "get-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool, orderItems: table<beezUPOrderItemId: string, orderItem_BeezUPStoreId: string, orderItem_Condition: string, orderItem_ImageUrl: string, orderItem_ItemPrice: float, orderItem_ItemTax: float, orderItem_MarketPlaceProductId: string, orderItem_MarketplaceImageUri: string, orderItem_MarketplaceProductUri: string, orderItem_MerchantImportedProductId: string, orderItem_MerchantImportedProductIdColumnName: string, orderItem_MerchantImportedProductUrl: string, orderItem_MerchantProductId: string, orderItem_MerchantProductIdColumnName: string, orderItem_OrderItemType: string, orderItem_Quantity: float, orderItem_Shipping_Price: float, orderItem_Title: string, orderItem_TotalPrice: float, orderItem_gtin: string>, order_Buyer_AddressCity: string, order_Buyer_AddressCountryIsoCodeAlpha2: string, order_Buyer_AddressCountryName: string, order_Buyer_AddressLine1: string, order_Buyer_AddressLine2: string, order_Buyer_AddressLine3: string, order_Buyer_AddressPostalCode: string, order_Buyer_AddressStateOrRegion: string, order_Buyer_Civility: string, order_Buyer_CompanyName: string, order_Buyer_Email: string, order_Buyer_FirstName: string, order_Buyer_Identifier: string, order_Buyer_LastName: string, order_Buyer_MobilePhone: string, order_Buyer_Phone: string, order_Comment: string, order_FulfilledBy: string, order_IsBusiness: bool, order_IsPrime: bool, order_MarketPlaceChannel: string, order_OrderItemsSourceUri: string, order_OrderSourceUri: string, order_PayingUtcDate: string, order_PaymentMethod: string, order_Shipping_AddressCity: string, order_Shipping_AddressCountryIsoCodeAlpha2: string, order_Shipping_AddressCountryName: string, order_Shipping_AddressLine1: string, order_Shipping_AddressLine2: string, order_Shipping_AddressLine3: string, order_Shipping_AddressName: string, order_Shipping_AddressPostalCode: string, order_Shipping_AddressStateOrRegion: string, order_Shipping_Civility: string, order_Shipping_CompanyName: string, order_Shipping_EarliestShipUtcDate: string, order_Shipping_Email: string, order_Shipping_FirstName: string, order_Shipping_LastName: string, order_Shipping_LatestShipUtcDate: string, order_Shipping_Method: string, order_Shipping_MobilePhone: string, order_Shipping_Phone: string, order_Shipping_Price: float, order_Shipping_ShippingTax: float, order_TotalCommission: float, order_TotalTax: float, transitionLinks: table<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool, rel: string>> {
+]: nothing -> oneof<record<accountId: int, beezUPOrderId: string, beezUPOrderUrl: string, etag: string, links: record<self: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, clearMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, harvest: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, history: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>, setMerchantInfo: record<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool>>, marketplaceBusinessCode: string, marketplaceTechnicalCode: string, order_Buyer_Name: string, order_CurrencyCode: string, order_Invoice_Number: string, order_Invoice_Uri: string, order_LastModificationUtcDate: string, order_MarketplaceLastModificationUtcDate: string, order_MarketplaceOrderId: string, order_MerchantECommerceSoftwareName: string, order_MerchantECommerceSoftwareVersion: string, order_MerchantOrderId: string, order_PurchaseUtcDate: string, order_Status_BeezUPOrderStatus: string, order_Status_MarketplaceOrderStatus: string, order_TotalPrice: float, processing: bool, orderItems: table<beezUPOrderItemId: string, orderItem_BeezUPStoreId: string, orderItem_Condition: string, orderItem_ImageUrl: string, orderItem_ItemPrice: float, orderItem_ItemTax: float, orderItem_MarketPlaceProductId: string, orderItem_MarketplaceImageUri: string, orderItem_MarketplaceProductUri: string, orderItem_MerchantImportedProductId: string, orderItem_MerchantImportedProductIdColumnName: string, orderItem_MerchantImportedProductUrl: string, orderItem_MerchantProductId: string, orderItem_MerchantProductIdColumnName: string, orderItem_OrderItemType: string, orderItem_Quantity: float, orderItem_Shipping_Price: float, orderItem_Title: string, orderItem_TotalPrice: float, orderItem_gtin: string>, order_Buyer_AddressCity: string, order_Buyer_AddressCountryIsoCodeAlpha2: string, order_Buyer_AddressCountryName: string, order_Buyer_AddressLine1: string, order_Buyer_AddressLine2: string, order_Buyer_AddressLine3: string, order_Buyer_AddressPostalCode: string, order_Buyer_AddressStateOrRegion: string, order_Buyer_Civility: string, order_Buyer_CompanyName: string, order_Buyer_Email: string, order_Buyer_FirstName: string, order_Buyer_Identifier: string, order_Buyer_LastName: string, order_Buyer_MobilePhone: string, order_Buyer_Phone: string, order_Comment: string, order_FulfilledBy: string, order_IsBusiness: bool, order_IsPrime: bool, order_MarketPlaceChannel: string, order_OrderItemsSourceUri: string, order_OrderSourceUri: string, order_PayingUtcDate: string, order_PaymentMethod: string, order_Shipping_AddressCity: string, order_Shipping_AddressCountryIsoCodeAlpha2: string, order_Shipping_AddressCountryName: string, order_Shipping_AddressLine1: string, order_Shipping_AddressLine2: string, order_Shipping_AddressLine3: string, order_Shipping_AddressName: string, order_Shipping_AddressPostalCode: string, order_Shipping_AddressStateOrRegion: string, order_Shipping_Civility: string, order_Shipping_CompanyName: string, order_Shipping_EarliestShipUtcDate: string, order_Shipping_Email: string, order_Shipping_FirstName: string, order_Shipping_LastName: string, order_Shipping_LatestShipUtcDate: string, order_Shipping_Method: string, order_Shipping_MobilePhone: string, order_Shipping_Phone: string, order_Shipping_Price: float, order_Shipping_ShippingTax: float, order_TotalCommission: float, order_TotalTax: float, transitionLinks: table<allOptionalParamsProvided: bool, allRequiredParamsProvided: bool, description: string, docUrl: string, href: string, info: record, label: string, method: string, operationId: string, parameters: record, urlTemplated: bool, rel: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
@@ -8853,9 +8965,9 @@ export def "get-order" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8890,7 +9002,7 @@ export def "head-order" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record {
+]: nothing -> oneof<record, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
@@ -8898,9 +9010,9 @@ export def "head-order" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "head"
     url: $full_url
@@ -8942,7 +9054,7 @@ export def "clear-merchant-order-info" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/clearMerchantOrderInfo") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -8984,7 +9096,7 @@ export def "harvest-order" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/harvest") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9019,7 +9131,7 @@ export def "get-order-history" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-none-match: string # ETag value to identify the last known version of requested resource.\ To avoid useless exchange, we recommend you to indicate the ETag you previously got from this operation.\ If the ETag value does not match the response will be 200 to give you a new content, otherwise the response will be: 304 Not Modified, without any content.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
-]: nothing -> record<changeOrderReportings: table<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool>, harvestOrderReportings: table<beezUPForcedStatus: string, beezUPStatus: string, creationUtcDate: string, errorMessage: string, executionUUID: string, lastUpdateUtcDate: string, marketplaceStatus: string, processingStatus: string, warningMessage: string>, lastModificationUtcDate: string> {
+]: nothing -> oneof<record<changeOrderReportings: table<changeOrderType: string, creationUtcDate: string, details: record, errorMessage: string, executionUUID: string, ipAddress: string, lastUpdateUtcDate: string, processingStatus: string, sourceType: string, sourceUserId: string, sourceUserName: string, testMode: bool>, harvestOrderReportings: table<beezUPForcedStatus: string, beezUPStatus: string, creationUtcDate: string, errorMessage: string, executionUUID: string, lastUpdateUtcDate: string, marketplaceStatus: string, processingStatus: string, warningMessage: string>, lastModificationUtcDate: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($marketplace_technical_code | is-empty) { error make --unspanned { msg: "path parameter 'marketplaceTechnicalCode' must be non-empty" } }
@@ -9027,9 +9139,9 @@ export def "get-order-history" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/history") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-None-Match": $if_none_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -9075,9 +9187,9 @@ export def "set-merchant-order-info" [
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/setMerchantOrderInfo") $auth.query)
   let req_body = {"order_MerchantECommerceSoftwareName": $order_merchant_e_commerce_software_name, "order_MerchantECommerceSoftwareVersion": $order_merchant_e_commerce_software_version, "order_MerchantOrderId": $order_merchant_order_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -9112,9 +9224,9 @@ export def "change-order" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login.
+  --user-name: string # Sometimes the user in the e-commerce application is not the same as user associated with the current subscription key. We recommend providing your application's user login. (required)
   --test-mode: oneof<nothing, bool> # If true, the operation will be not be sent to marketplace. But the validation will be taken in account. (default: false, e.g. false)
-  --if-match: string # ETag value to identify the last known version of requested resource.\ To ensure that you are making a change on the lastest version of the resource.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3
+  --if-match: string # ETag value to identify the last known version of requested resource.\ To ensure that you are making a change on the lastest version of the resource.\ For more details go to this link: http://tools.ietf.org/html/rfc7232#section-2.3 (required)
   --body: record
 ]: any -> any {
   let input = $in
@@ -9124,14 +9236,16 @@ export def "change-order" [
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($beez_up_order_id | is-empty) { error make --unspanned { msg: "path parameter 'beezUPOrderId' must be non-empty" } }
   if ($change_order_type | is-empty) { error make --unspanned { msg: "path parameter 'changeOrderType' must be non-empty" } }
+  if ($user_name == null) { error make --unspanned { msg: "required query parameter 'userName' missing: pass --user-name" } }
+  if ($if_match == null) { error make --unspanned { msg: "required header parameter 'If-Match' missing: pass --if-match" } }
   let qp = [(serialize-qp "userName" $user_name "scalar") (serialize-qp "testMode" $test_mode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({marketplace_technical_code: (encode-path-segment $marketplace_technical_code), account_id: (encode-path-segment $account_id), beez_up_order_id: (encode-path-segment $beez_up_order_id), change_order_type: (encode-path-segment $change_order_type)} | format pattern "/v2/user/marketplaces/orders/{marketplace_technical_code}/{account_id}/{beez_up_order_id}/{change_order_type}") $qp $auth.query)
   let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"If-Match": $if_match} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url

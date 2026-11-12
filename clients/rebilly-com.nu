@@ -12,29 +12,38 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
-    "bearer" => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
-    "reb-apikey" => { {scheme: $scheme, headers: {REB-APIKEY: $token_val}, query: "", location: "header"} }
-    "none" => { {scheme: $scheme, headers: {}, query: "", location: "none"} }
+    "bearer" => { {scheme: $scheme, headers: {"Authorization": $"Bearer ($token_val)"}, query: "", location: "header"} }
+    "reb-apikey" => { {scheme: $scheme, headers: {"REB-APIKEY": $token_val}, query: "", location: "header"} }
     _ => { {scheme: $scheme, headers: {Authorization: $"Bearer ($token_val)"}, query: "", location: "header"} }
   }
 }
 
-# Serialize a single query parameter based on collection style
+# Serialize a single query parameter based on collection style.
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record value follows OpenAPI object serialization: "multi" (form +
+# explode) is bare `k=v` pairs, "csv"/"ssv"/"tsv"/"pipes" (no explode) is
+# `name=k,v,k,v` with that delimiter, anything else is deepObject
+# `name[k]=v`. Null members and null list elements are skipped.
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
-  let is_list = ($value | describe | str starts-with "list")
+  # A list of records describes as `table<…>`, not `list<…>`.
+  let is_list = (($value | describe) =~ '^(list|table)')
+  let value = if $is_list { $value | compact } else { $value }
   if $is_list and ($value | is-empty) { return [] }
   let n = (encode-path-segment $name)
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[(encode-path-segment $in.k)]=(encode-path-segment $in.v)" }) }
+  let sep = (match $style { "ssv" => "%20", "tsv" => "%09", "pipes" => "|", _ => "," })
+  if ($value | describe | str starts-with "record") {
+    let pairs = ($value | transpose k v | where v != null)
+    return (match $style {
+      "multi" => { $pairs | each {|p| $"(encode-path-segment $p.k)=(encode-path-segment $p.v)" } }
+      "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($pairs | each {|p| [(encode-path-segment $p.k) (encode-path-segment $p.v)] } | flatten | str join $sep)"] }
+      _ => { $pairs | each {|p| $"($n)[(encode-path-segment $p.k)]=(encode-path-segment $p.v)" } }
+    })
+  }
   if not $is_list { return [$"($n)=(encode-path-segment $value)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
-    "csv" => { let joined = ($value | each { encode-path-segment $in } | str join ","); [$"($n)=($joined)"] }
-    "ssv" => { let joined = ($value | each { encode-path-segment $in } | str join "%20"); [$"($n)=($joined)"] }
-    "tsv" => { let joined = ($value | each { encode-path-segment $in } | str join "%09"); [$"($n)=($joined)"] }
-    "pipes" => { let joined = ($value | each { encode-path-segment $in } | str join "|"); [$"($n)=($joined)"] }
+    "csv" | "ssv" | "tsv" | "pipes" => { [$"($n)=($value | each { encode-path-segment $in } | str join $sep)"] }
     "deepObject" => { $value | each {|v| $"($n)[]=(encode-path-segment $v)" } }
     _ => { $value | each {|v| $"($n)=(encode-path-segment $v)" } }
   }
@@ -42,8 +51,13 @@ def serialize-qp [name: string, value: any, style: string]: nothing -> list<stri
 
 # Percent-encode a path-segment value per RFC 3986.
 # Unreserved chars ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
+# A record or list (an array-of-object query param's element) has no scalar
+# form, so it is sent as compact JSON, the convention the multipart builder
+# uses for structured text parts. `null` encodes as the empty string.
 def encode-path-segment [v: any]: nothing -> string {
-  $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
+  if $v == null { return "" }
+  let text = if (($v | describe) =~ '^(record|list|table)') { $v | to json --raw } else { $v | into string }
+  $text | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
 # Serialize an array-typed path parameter. OpenAPI 3 `style: simple`
@@ -54,7 +68,16 @@ def encode-path-segment [v: any]: nothing -> string {
 # producing a guaranteed-404 URL. The else-branch keeps scalar values on the
 # historical encode-path-segment path (defensive against a bare string).
 def encode-path-array [v: any]: nothing -> string {
-  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+  if (($v | describe) | str starts-with "list") { $v | compact | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
+# Serialize a greedy path label (AWS `{Key+}`): the value spans segments, so
+# each `/`-separated piece is RFC-3986-encoded on its own and the slashes stay.
+# Only a scalar is a path: null and structured values have no slashes to keep
+# and take encode-path-segment's form (empty / compact JSON) unchanged.
+def encode-path-greedy [v: any]: nothing -> string {
+  if ($v == null) or (($v | describe) =~ '^(record|list|table)') { return (encode-path-segment $v) }
+  $v | into string | split row "/" | each { encode-path-segment $in } | str join "/"
 }
 
 # Build the request URL from base, path, and any number of pre-encoded query
@@ -62,9 +85,11 @@ def encode-path-array [v: any]: nothing -> string {
 # `&`-joinable `key=value` string already percent-encoded by its producer; empty
 # fragments are dropped. `url parse`/`url join` own the `?`/`&` structure — no
 # delimiters are hand-spliced — and any query already on the base URL is merged in.
+# Only the seam between the base path and `path` is normalized to one `/`:
+# slashes inside `path` are data (the S3 keys `dir//f` and `dir/f` differ).
 def build-url [base: string, path: string, ...query_parts: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
-  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let full_path = if ($path | is-empty) { $parsed.path } else { $"($parsed.path | str trim --right --char '/')/($path | str trim --left --char '/')" }
   let query = ([$parsed.query] | append $query_parts | where {|q| $q | is-not-empty } | str join "&")
   $parsed | upsert path $full_path | upsert query $query | url join
 }
@@ -87,9 +112,35 @@ def handle-response [allow_errors: bool, full: bool, ok_codes: list<int>]: recor
   $resp.body
 }
 
+# Merge pipeline input into the body assembled from flags. A piped record
+# merges deep under the flags (a flag wins on a shared key). `accepts` says
+# what else the body may be: "list" takes a piped list whole (a oneOf/anyOf
+# array variant), "scalar" takes any other piped value when the flags gave
+# nothing (a string/opaque body), "record" takes nothing else.
+def merge-body-input [input: any, req_body: any, accepts: string]: nothing -> any {
+  let input_type = ($input | describe)
+  if ($input_type | str starts-with "record") { return ($input | merge deep ($req_body | default {})) }
+  match $accepts {
+    "list" => { if ($input_type =~ '^(list|table)') { $input } else { $req_body } }
+    "scalar" => { if ($input | is-not-empty) and ($req_body | is-empty) { $input } else { $req_body } }
+    _ => $req_body
+  }
+}
+
+# Merge `extra` headers over `base`: the right side wins, as with `merge`,
+# except for `Cookie`. A request carries all its cookies in one header
+# (RFC 6265 §5.4), so both sides' cookie strings are kept, joined with `; `.
+# A plain `merge` would let a cookie param drop a cookie-located auth token.
+def merge-headers [base: record, extra: record]: nothing -> record {
+  let cookie = ([$base.Cookie? $extra.Cookie?] | where {|c| $c | is-not-empty } | str join "; ")
+  let merged = ($base | merge $extra | reject -o Cookie)
+  if ($cookie | is-empty) { $merged } else { $merged | insert Cookie $cookie }
+}
+
 # GET — bodyless, honours --raw
 def send-get [req: record, insecure: bool, raw: bool, allow_errors: bool, full: bool, ok_codes: list<int>]: nothing -> any {
-  http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url | handle-response $allow_errors $full $ok_codes
+  let resp = http get --headers $req.headers --full --allow-errors --max-time $req.timeout --insecure=$insecure --raw=$raw $req.url
+  $resp | handle-response $allow_errors $full $ok_codes
 }
 
 # POST — body + content-type
@@ -127,14 +178,18 @@ def related-type-completer [] { ["customer" "customer-timeline-comment" "dispute
 def mode-completer [] { ["password" "passwordless"] }
 def account-type-completer [] { ["checking" "other" "savings"] }
 def type-completer [] { ["address" "bank-account" "bin" "country" "customer-id" "email" "email-domain" "fingerprint" "ip-address" "payment-card"] }
+def resource-completer [] { ["bump-offers" "customers" "payment-instruments" "plans" "products" "subscriptions" "transactions" "websites"] }
 def type-completer-1 [] { ["array" "boolean" "datetime" "integer" "monetary" "number" "string"] }
 def type-completer-2 [] { ["aml-list-was-possibly-matched" "coupon-applied" "coupon-redeemed" "coupon-redemption-canceled" "custom-event" "custom-event-processed" "custom-fields-changed" "customer-bank-account-blocked" "customer-blocked" "customer-comment-created" "customer-created" "customer-payment-card-blocked" "default-payment-instrument-changed" "email-message-sent" "experian-check-performed" "invoice-abandoned" "invoice-created" "invoice-disputed" "invoice-issued" "invoice-paid" "invoice-partially-paid" "invoice-partially-refunded" "invoice-past-due" "invoice-refunded" "invoice-voided" "kyc-document-accepted" "kyc-document-created" "kyc-document-manually-accepted" "kyc-document-manually-rejected" "kyc-document-modified" "kyc-document-rejected" "lead-source-changed" "order-activated" "order-canceled" "order-churned" "order-completed" "order-created" "order-downgraded" "order-paid-early" "order-reactivated" "order-renewed" "order-upgraded" "payment-card-expired" "payment-instrument-created" "payment-instrument-deactivated" "primary-address-changed" "transaction-abandoned" "transaction-amount-discrepancy-found" "transaction-approved" "transaction-canceled" "transaction-declined" "transaction-discrepancy-found" "transaction-refunded" "transaction-voided" "transaction-waiting-gateway"] }
 def type-completer-3 [] { ["Apple Pay"] }
 def reason-code-completer [] { ["0" "00" "1" "10.1" "10.2" "10.3" "10.4" "10.5" "1000" "11.1" "11.2" "11.3" "12" "12.1" "12.2" "12.3" "12.4" "12.5" "12.6" "12.7" "13.1" "13.2" "13.3" "13.4" "13.5" "13.6" "13.7" "13.8" "13.9" "2" "2" "3" "30" "31" "35" "37" "4" "40" "41" "42" "46" "47" "49" "5" "50" "51" "53" "54" "55" "57" "59" "6" "60" "62" "63" "7" "7" "70" "71" "72" "73" "74" "75" "76" "77" "79" "8" "80" "81" "82" "83" "85" "86" "9" "93" "A" "A01" "A02" "A08" "AL" "AP" "AW" "B" "C02" "C04" "C05" "C08" "C14" "C18" "C28" "C31" "C32" "CA" "CD" "CR" "DA" "DP" "DP1" "EX" "F10" "F14" "F22" "F24" "F29" "FR1" "FR4" "FR6" "IC" "IN" "IS" "LP" "M01" "M10" "M49" "N" "NA" "NC" "P" "P01" "P03" "P04" "P05" "P07" "P08" "P22" "P23" "R03" "R13" "RG" "RM" "RN1" "RN2" "SV" "TF" "TNM" "UA01" "UA02" "UA03" "UA10" "UA11" "UA12" "UA18" "UA20" "UA21" "UA22" "UA23" "UA28" "UA30" "UA31" "UA32" "UA38" "UA99" "bank_cannot_process" "credit_not_processed" "customer_initiated" "debit_not_authorized" "duplicate" "fraudulent" "general" "incorrect_account_details" "insufficient_funds" "pre-chargeback-alert" "product_not_received" "product_unacceptable" "subscription_canceled" "unrecognized"] }
 def status-completer [] { ["forfeited" "lost" "response-needed" "under-review" "unknown" "won"] }
 def type-completer-4 [] { ["arbitration" "ethoca-alert" "first-chargeback" "fraud" "information-request" "second-chargeback" "verifi-alert"] }
+def extension-completer [] { [".gif" ".jpg" ".png"] }
 def accept-completer [] { ["application/json" "application/pdf"] }
 def type-completer-5 [] { ["credit" "debit"] }
+def document-subtype-completer [] { ["bank-statement" "birth-certificate" "copy-credit-card" "credit-card-statement" "driver-license" "ewallet-holder-details" "ewallet-transaction-statement" "id-card" "inheritance-documentation" "lease-agreement" "other" "passport" "proof-of-age-card" "public-health-card" "public-service" "rental-receipt" "reverse-of-id" "salary-slip" "sale-of-assets" "tax-return" "utility-bill"] }
+def document-type-completer [] { ["address-proof" "funds-proof" "identity-proof" "purchase-proof"] }
 def type-completer-6 [] { ["document-expired" "document-not-matching" "document-unreadable" "other" "underage-person"] }
 def method-completer [] { ["payment-card"] }
 def method-completer-1 [] { ["paypal"] }
@@ -150,9 +205,9 @@ def result-completer [] { ["abandoned" "approved" "canceled" "declined"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get3-d-secure-collection" } } | get name | first)
+  let mod_name = (scope modules | where { ($in.commands | get name | sort) == (["get3-d-secure-collection" "post3-d-secure" "get3-d-secure" "get-aml-entry" "get-attachment-collection" "post-attachment" "delete-attachment" "get-attachment" "put-attachment" "get-authentication-option" "put-authentication-option" "get-authentication-token-collection" "post-authentication-token" "delete-authentication-token" "get-authentication-token-verification" "post-authentication-token-exchange" "get-bank-account-collection" "post-bank-account" "get-bank-account" "patch-bank-account" "put-bank-account" "post-bank-account-deactivation" "get-blocklist-collection" "post-blocklist" "delete-blocklist" "get-blocklist" "put-blocklist" "get-coupon-collection" "post-coupon" "get-coupon-redemption-collection" "post-coupon-redemption" "get-coupon-redemption" "post-coupon-redemption-cancellation" "get-coupon" "put-coupon" "post-coupon-expiration" "get-credential-collection" "post-credential" "delete-credential" "get-credential" "put-credential" "get-custom-field-collection" "get-custom-field" "put-custom-field" "get-customer-timeline-custom-event-type-collection" "post-customer-timeline-custom-event-type" "get-customer-timeline-custom-event-type" "get-customer-timeline-event-collection" "get-customer-collection" "post-customer" "delete-customer" "get-customer" "put-customer" "delete-customer-lead-source" "get-customer-lead-source" "put-customer-lead-source" "get-customer-timeline-collection" "post-customer-timeline" "delete-customer-timeline" "get-customer-timeline" "get-customer-upcoming-invoice-collection" "post-digital-wallet-validation" "get-dispute-collection" "post-dispute" "get-dispute" "put-dispute" "get-file-collection" "post-file" "delete-file" "get-file" "put-file" "get-file-download" "get-file-download-extension" "get-invoice-collection" "post-invoice" "get-invoice" "put-invoice" "post-invoice-abandonment" "post-invoice-issuance" "get-invoice-item-collection" "post-invoice-item" "post-invoice-recalculation" "post-invoice-reissuance" "get-invoice-timeline-collection" "post-invoice-timeline" "delete-invoice-timeline" "get-invoice-timeline" "post-invoice-transaction" "get-invoice-transaction-allocation-collection" "post-invoice-void" "get-kyc-document-collection" "post-kyc-document" "get-kyc-document" "put-kyc-document" "post-kyc-document-acceptance" "post-kyc-document-matches" "post-kyc-document-rejection" "post-kyc-document-review" "get-kyc-request-collection" "post-kyc-request" "delete-kyc-request" "get-kyc-request" "patch-kyc-request" "get-password-token-collection" "post-password-token" "delete-password-token" "get-password-token" "get-payment-card-collection" "post-payment-card" "get-payment-card" "patch-payment-card" "put-payment-card" "post-payment-card-deactivation" "get-payment-instrument-collection" "post-payment-instrument" "get-payment-instrument" "patch-payment-instrument" "post-payment-instrument-deactivation" "post-payout" "get-pay-pal-account-collection" "post-pay-pal-account" "get-pay-pal-account" "put-pay-pal-account" "post-pay-pal-account-deactivation" "get-plan-collection" "post-plan" "delete-plan" "get-plan" "put-plan" "get-product-collection" "post-product" "delete-product" "get-product" "put-product" "post-ready-to-pay" "get-search" "get-shipping-zone-collection" "post-shipping-zone" "delete-shipping-zone" "get-shipping-zone" "put-shipping-zone" "get-subscription-cancellation-collection" "post-subscription-cancellation" "delete-subscription-cancellation" "get-subscription-cancellation" "put-subscription-cancellation" "get-subscription-reactivation-collection" "post-subscription-reactivation" "get-subscription-reactivation" "get-subscription-collection" "post-subscription" "get-subscription" "put-subscription" "post-subscription-items-change" "post-subscription-interim-invoice" "get-subscription-timeline-collection" "post-subscription-timeline" "delete-subscription-timeline" "get-subscription-timeline" "get-subscription-upcoming-invoice-collection" "post-upcoming-invoice-issuance" "get-tag-collection" "post-tag" "delete-tag" "get-tag" "patch-tag" "delete-tag-customer-collection" "post-tag-customer-collection" "delete-tag-customer" "post-tag-customer" "get-token-collection" "post-token" "get-token" "get-transaction-collection" "post-transaction" "get-transaction" "patch-transaction" "post-transaction-query" "post-transaction-refund" "get-transaction-timeline-collection" "post-transaction-timeline" "delete-transaction-timeline" "get-transaction-timeline" "post-transaction-update" "commands"] | sort) } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
-  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  let cmd_ids = ($mod_cmds | where name != "commands" | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
     let sig = $cmd.signatures | values | first
     let params = $sig
@@ -186,13 +241,16 @@ export def "get3-d-secure-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
-]: nothing -> table<_links: list<record>, amount: float, cavv: string, createdTime: record, currency: record, customerId: record, eci: int, enrolled: string, enrollmentEci: string, gatewayAccountId: record, id: record, payerAuthResponseStatus: string, paymentCardId: record, signatureVerification: string, websiteId: record, xid: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, amount: float, cavv: string, createdTime: string, currency: string, customerId: string, eci: int, enrolled: string, enrollmentEci: string, gatewayAccountId: string, id: string, payerAuthResponseStatus: string, paymentCardId: string, signatureVerification: string, websiteId: string, xid: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/3dsecure" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -211,7 +269,6 @@ export def "get3-d-secure-collection" [
 #
 # POST /3dsecure
 # operationId: Post3DSecure
-# --_links item shape: {rel: "self", href: string}
 export def "post3-d-secure" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,29 +282,29 @@ export def "post3-d-secure" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   amount: float # Transaction amount. (format: double)
   --cavv: string # The 3D Secure entry cardholder authentication verification value.
-  --created-time: any # The 3D Secure entry created time.
-  currency: any
-  customer_id: any # Related customer ID.
+  --created-time: string # The 3D Secure entry created time. (format: date-time)
+  currency: string # ISO 4217 alphabetic currency code.
+  customer_id: string # Related customer ID.
   --eci: int # The 3D Secure entry electronic commerce indicator.
   enrolled: string@enrolled-completer # Is the cardholder enrolled in 3DSecure.
   enrollment_eci: string # The 3D Secure entry enrollment eci.
-  gateway_account_id: any # Related gateway account ID.
+  gateway_account_id: string # Related gateway account ID.
   --payer-auth-response-status: string@payer-auth-response-status-completer # The 3D Secure entry Auth Response Status.
-  payment_card_id: any # Related payment card ID.
+  payment_card_id: string # Related payment card ID.
   --signature-verification: string@signature-verification-completer # If signature was verified.
-  website_id: any # Related Website ID.
+  website_id: string # Related Website ID.
   --xid: string # The 3D Secure entry transaction Id.
-]: any -> record<_links: table<rel: string>, amount: float, cavv: string, createdTime: record, currency: record, customerId: record, eci: int, enrolled: string, enrollmentEci: string, gatewayAccountId: record, id: record, payerAuthResponseStatus: string, paymentCardId: record, signatureVerification: string, websiteId: record, xid: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, amount: float, cavv: string, createdTime: string, currency: string, customerId: string, eci: int, enrolled: string, enrollmentEci: string, gatewayAccountId: string, id: string, payerAuthResponseStatus: string, paymentCardId: string, signatureVerification: string, websiteId: string, xid: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/3dsecure" $auth.query)
   let req_body = {"amount": $amount, "cavv": $cavv, "createdTime": $created_time, "currency": $currency, "customerId": $customer_id, "eci": $eci, "enrolled": $enrolled, "enrollmentEci": $enrollment_eci, "gatewayAccountId": $gateway_account_id, "payerAuthResponseStatus": $payer_auth_response_status, "paymentCardId": $payment_card_id, "signatureVerification": $signature_verification, "websiteId": $website_id, "xid": $xid} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -278,15 +335,15 @@ export def "get3-d-secure" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, amount: float, cavv: string, createdTime: record, currency: record, customerId: record, eci: int, enrolled: string, enrollmentEci: string, gatewayAccountId: record, id: record, payerAuthResponseStatus: string, paymentCardId: record, signatureVerification: string, websiteId: record, xid: string> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, amount: float, cavv: string, createdTime: string, currency: string, customerId: string, eci: int, enrolled: string, enrollmentEci: string, gatewayAccountId: string, id: string, payerAuthResponseStatus: string, paymentCardId: string, signatureVerification: string, websiteId: string, xid: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/3dsecure/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -315,20 +372,22 @@ export def "get-aml-entry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --first-name: string # First name of individual to search.
-  --last-name: string # Last name of individual to search.
+  --first-name: string # First name of individual to search. (required)
+  --last-name: string # Last name of individual to search. (required)
   --dob: string # Date of birth in format YYYY-MM-DD.
   --country: string # Country of individual as an ISO Alpha-2 code.
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> table<_links: list<record>, address: list<record>, aliases: list<record>, comments: string, confidence: string, dob: list<string>, firstName: string, gender: string, lastName: string, legalBasis: list<string>, nationality: string, passport: list<record>, regime: string, source: string, sourceType: string, title: list<string>, type: string> {
+]: nothing -> oneof<table<_links: list<record>, address: list<record>, aliases: list<record>, comments: string, confidence: string, dob: list<string>, firstName: string, gender: string, lastName: string, legalBasis: list<string>, nationality: string, passport: list<record>, regime: string, source: string, sourceType: string, title: list<string>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
+  if ($first_name == null) { error make --unspanned { msg: "required query parameter 'firstName' missing: pass --first-name" } }
+  if ($last_name == null) { error make --unspanned { msg: "required query parameter 'lastName' missing: pass --last-name" } }
   let qp = [(serialize-qp "firstName" $first_name "scalar") (serialize-qp "lastName" $last_name "scalar") (serialize-qp "dob" $dob "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/aml" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -363,18 +422,21 @@ export def "get-attachment-collection" [
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
   --fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<_embedded: list<any>, _links: list<any>, createdTime: record, description: string, fileId: string, id: record, name: string, relatedId: string, relatedType: string, updatedTime: record> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_embedded: list<any>, _links: list<any>, createdTime: string, description: string, fileId: string, id: string, name: string, relatedId: string, relatedType: string, updatedTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/attachments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "expand": $expand, "fields": $fields, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "expand": $expand, "fields": $fields, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -400,24 +462,24 @@ export def "post-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Creation date/time.
+  --created-time: string # Creation date/time. (format: date-time)
   --description: string # The Attachment description.
   file_id: string # Linked File object id.
   --name: string # The Original Attachment name.
   related_id: string # Linked object Id.
   related_type: string@related-type-completer # Linked object type.
-  --updated-time: any # Latest update date/time.
-]: any -> record<_embedded: list<any>, _links: list<any>, createdTime: record, description: string, fileId: string, id: record, name: string, relatedId: string, relatedType: string, updatedTime: record> {
+  --updated-time: string # Latest update date/time. (format: date-time)
+]: any -> oneof<record<_embedded: list<any>, _links: list<any>, createdTime: string, description: string, fileId: string, id: string, name: string, relatedId: string, relatedType: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attachments" $auth.query)
   let req_body = {"createdTime": $created_time, "description": $description, "fileId": $file_id, "name": $name, "relatedId": $related_id, "relatedType": $related_type, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -454,9 +516,9 @@ export def "delete-attachment" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/attachments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -487,15 +549,15 @@ export def "get-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_embedded: list<any>, _links: list<any>, createdTime: record, description: string, fileId: string, id: record, name: string, relatedId: string, relatedType: string, updatedTime: record> {
+]: nothing -> oneof<record<_embedded: list<any>, _links: list<any>, createdTime: string, description: string, fileId: string, id: string, name: string, relatedId: string, relatedType: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/attachments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -526,25 +588,25 @@ export def "put-attachment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Creation date/time.
+  --created-time: string # Creation date/time. (format: date-time)
   --description: string # The Attachment description.
   file_id: string # Linked File object id.
   --name: string # The Original Attachment name.
   related_id: string # Linked object Id.
   related_type: string@related-type-completer # Linked object type.
-  --updated-time: any # Latest update date/time.
-]: any -> record<_embedded: list<any>, _links: list<any>, createdTime: record, description: string, fileId: string, id: record, name: string, relatedId: string, relatedType: string, updatedTime: record> {
+  --updated-time: string # Latest update date/time. (format: date-time)
+]: any -> oneof<record<_embedded: list<any>, _links: list<any>, createdTime: string, description: string, fileId: string, id: string, name: string, relatedId: string, relatedType: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/attachments/{id}") $auth.query)
   let req_body = {"createdTime": $created_time, "description": $description, "fileId": $file_id, "name": $name, "relatedId": $related_id, "relatedType": $related_type, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -574,14 +636,14 @@ export def "get-authentication-option" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> table<authTokenTtl: int, credentialTtl: int, otpRequired: bool, passwordPattern: string, resetTokenTtl: int> {
+]: nothing -> oneof<table<authTokenTtl: int, credentialTtl: int, otpRequired: bool, passwordPattern: string, resetTokenTtl: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication-options" $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -616,17 +678,17 @@ export def "put-authentication-option" [
   --otp-required: oneof<nothing, bool> # Should OTP be required to exchange token.
   --password-pattern: string # Allowed password pattern.
   --reset-token-ttl: int # The default lifetime of the reset-token in seconds.
-]: any -> record<authTokenTtl: int, credentialTtl: int, otpRequired: bool, passwordPattern: string, resetTokenTtl: int> {
+]: any -> oneof<record<authTokenTtl: int, credentialTtl: int, otpRequired: bool, passwordPattern: string, resetTokenTtl: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication-options" $auth.query)
   let req_body = {"authTokenTtl": $auth_token_ttl, "credentialTtl": $credential_ttl, "otpRequired": $otp_required, "passwordPattern": $password_pattern, "resetTokenTtl": $reset_token_ttl} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -657,13 +719,16 @@ export def "get-authentication-token-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
-]: nothing -> table<credentialId: record, mode: string, otpRequired: bool, token: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<credentialId: string, mode: string, otpRequired: bool, token: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication-tokens" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -696,17 +761,17 @@ export def "post-authentication-token" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   mode: string@mode-completer # The token's generation mode. (default: password)
   --otp-required: oneof<nothing, bool> # Should OTP be required to exchange this token.
-]: any -> record<credentialId: record, mode: string, otpRequired: bool, token: string> {
+]: any -> oneof<record<credentialId: string, mode: string, otpRequired: bool, token: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/authentication-tokens" $auth.query)
   let req_body = {"mode": $mode, "otpRequired": $otp_required} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -743,9 +808,9 @@ export def "delete-authentication-token" [
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/authentication-tokens/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -777,15 +842,15 @@ export def "get-authentication-token-verification" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<credentialId: record, mode: string, otpRequired: bool, token: string> {
+]: nothing -> oneof<record<credentialId: string, mode: string, otpRequired: bool, token: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/authentication-tokens/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -804,8 +869,6 @@ export def "get-authentication-token-verification" [
 #
 # POST /authentication-tokens/{token}/exchange
 # operationId: PostAuthenticationTokenExchange
-# --_links item shape: {rel: "customer"|"targetCustomer", href: string}
-# --acl item shape: {permissions: any, scope: any}
 export def "post-authentication-token-exchange" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -818,24 +881,24 @@ export def "post-authentication-token-exchange" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --acl: list # item shape: {permissions: any, scope: any}
+  --acl: list # item shape: {permissions: list<string>, scope: record}
   --custom-claims: record # e.g. {documents: [identity-proof, address-proof], redirectUrl: https://mywebsite.com}
   --expired-time: string # Session expired time. Defaults to one hour. (format: date-time)
   --invalidate: oneof<nothing, bool> # Whether to invalidate token after exchange or not. (default: true, e.g. true)
   --one-time-password: string # The one time password sent via an email. Should contain digits only. (e.g. 123456)
-  --updated-time: any # Session updated time.
-]: any -> record<_links: table<rel: string>, acl: table<permissions: record, scope: record>, createdTime: string, customClaims: record, customerId: record, expiredTime: string, id: record, invalidate: bool, oneTimePassword: string, token: string, type: string, updatedTime: record> {
+  --updated-time: string # Session updated time. (format: date-time)
+]: any -> oneof<record<_links: table<rel: string, href: string>, acl: table<permissions: list, scope: record>, createdTime: string, customClaims: record, customerId: string, expiredTime: string, id: string, invalidate: bool, oneTimePassword: string, token: string, type: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/authentication-tokens/{token_arg}/exchange") $auth.query)
   let req_body = {"acl": $acl, "customClaims": $custom_claims, "expiredTime": $expired_time, "invalidate": $invalidate, "oneTimePassword": $one_time_password, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -867,20 +930,23 @@ export def "get-bank-account-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The partial search of the text fields.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, fingerprint: string, id: record, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, fingerprint: string, id: string, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "filter" $filter "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bank-accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "q": $q, "sort": $qp_sort, "filter": $filter, "expand": $expand} | compact)
+    query: ({"limit": $limit, "offset": $offset, "q": $q, "sort": $sort, "filter": $filter, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -907,19 +973,19 @@ export def "post-bank-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  --customer-id: any # The Customer's ID.
-  --body-token: string # BankAccountToken ID.
-]: any -> record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, fingerprint: string, id: record, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>> {
+  --customer-id: string # The Customer's ID.
+  --body-token: string # BankAccountToken ID. (spec name: token)
+]: any -> oneof<record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, fingerprint: string, id: string, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank-accounts" $auth.query)
   let req_body = {"customFields": $custom_fields, "customerId": $customer_id, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -950,15 +1016,15 @@ export def "get-bank-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, fingerprint: string, id: record, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>> {
+]: nothing -> oneof<record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, fingerprint: string, id: string, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bank-accounts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -991,20 +1057,20 @@ export def "patch-bank-account" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --account-type: string@account-type-completer # Bank's account type.
   --bank-name: string # Bank's name.
-  --billing-address: any # The billing address.
+  --billing-address: record # The billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-]: any -> record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, fingerprint: string, id: record, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>> {
+]: any -> oneof<record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, fingerprint: string, id: string, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bank-accounts/{id}") $auth.query)
   let req_body = {"accountType": $account_type, "bankName": $bank_name, "billingAddress": $billing_address, "customFields": $custom_fields} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -1036,20 +1102,20 @@ export def "put-bank-account" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  --customer-id: any # The Customer's ID.
-  --body-token: string # BankAccountToken ID.
-]: any -> record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, fingerprint: string, id: record, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>> {
+  --customer-id: string # The Customer's ID.
+  --body-token: string # BankAccountToken ID. (spec name: token)
+]: any -> oneof<record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, fingerprint: string, id: string, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bank-accounts/{id}") $auth.query)
   let req_body = {"customFields": $custom_fields, "customerId": $customer_id, "token": $body_token} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1080,15 +1146,15 @@ export def "post-bank-account-deactivation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, fingerprint: string, id: record, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>> {
+]: nothing -> oneof<record<accountNumberType: string, accountType: string, bankName: string, bic: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, fingerprint: string, id: string, last4: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, routingNumber: string, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/bank-accounts/{id}/deactivation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1119,20 +1185,23 @@ export def "get-blocklist-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --q: string # The partial search of the text fields.
-]: nothing -> table<_links: list<record>, createdTime: record, expirationTime: string, id: record, type: string, updatedTime: record, value: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, createdTime: string, expirationTime: string, id: string, type: string, updatedTime: string, value: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/blocklists" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "sort": $qp_sort, "filter": $filter, "q": $q} | compact)
+    query: ({"limit": $limit, "offset": $offset, "sort": $sort, "filter": $filter, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1147,7 +1216,6 @@ export def "get-blocklist-collection" [
 #
 # POST /blocklists
 # operationId: PostBlocklist
-# --_links item shape: {rel: "self", href: string}
 export def "post-blocklist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,22 +1227,22 @@ export def "post-blocklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The blocklist created time.
+  --created-time: string # The blocklist created time. (format: date-time)
   --expiration-time: string # The blocklist expiration time. (format: date-time)
   type: string@type-completer # The blocklist type.
-  --updated-time: any # The blocklist updated time.
+  --updated-time: string # The blocklist updated time. (format: date-time)
   value: string # The blocklist value.
-]: any -> record<_links: table<rel: string>, createdTime: record, expirationTime: string, id: record, type: string, updatedTime: record, value: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, expirationTime: string, id: string, type: string, updatedTime: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/blocklists" $auth.query)
   let req_body = {"createdTime": $created_time, "expirationTime": $expiration_time, "type": $type, "updatedTime": $updated_time, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1211,9 +1279,9 @@ export def "delete-blocklist" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blocklists/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1244,15 +1312,15 @@ export def "get-blocklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, createdTime: record, expirationTime: string, id: record, type: string, updatedTime: record, value: string> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, expirationTime: string, id: string, type: string, updatedTime: string, value: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blocklists/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1271,7 +1339,6 @@ export def "get-blocklist" [
 #
 # PUT /blocklists/{id}
 # operationId: PutBlocklist
-# --_links item shape: {rel: "self", href: string}
 export def "put-blocklist" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1284,23 +1351,23 @@ export def "put-blocklist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The blocklist created time.
+  --created-time: string # The blocklist created time. (format: date-time)
   --expiration-time: string # The blocklist expiration time. (format: date-time)
   type: string@type-completer # The blocklist type.
-  --updated-time: any # The blocklist updated time.
+  --updated-time: string # The blocklist updated time. (format: date-time)
   value: string # The blocklist value.
-]: any -> record<_links: table<rel: string>, createdTime: record, expirationTime: string, id: record, type: string, updatedTime: record, value: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, expirationTime: string, id: string, type: string, updatedTime: string, value: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/blocklists/{id}") $auth.query)
   let req_body = {"createdTime": $created_time, "expirationTime": $expiration_time, "type": $type, "updatedTime": $updated_time, "value": $value} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1333,18 +1400,21 @@ export def "get-coupon-collection" [
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --q: string # The partial search of the text fields.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<_links: list<record>, createdTime: record, description: string, discount: record<type: string>, expiredTime: string, id: record, issuedTime: string, redemptionsCount: int, restrictions: list<record>, status: string, updatedTime: record> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, createdTime: string, description: string, discount: record<type: string>, expiredTime: string, id: string, issuedTime: string, redemptionsCount: int, restrictions: list<record>, status: string, updatedTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/coupons" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1359,9 +1429,6 @@ export def "get-coupon-collection" [
 #
 # POST /coupons
 # operationId: PostCoupon
-# --_links item shape: {rel: "self", href: string}
-# --discount shape: {type: "fixed"|"percent"}
-# --restrictions item shape: {type: "discounts-per-redemption"|"minimum-order-amount"|"paid-by-time"|"redemptions-per-customer"|"restrict-to-invoices"|"restrict-to-plans"|"restrict-to-products"|"restrict-to-subscriptions"|"total-redemptions"}
 export def "post-coupon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1373,24 +1440,24 @@ export def "post-coupon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Coupon created time.
+  --created-time: string # Coupon created time. (format: date-time)
   --description: string # Your coupon description. When it is not empty this is used for invoice discount item description, otherwise the item's description uses coupon's ID like 'Coupon "COUPON-ID"'.
   discount: record # shape: {type: "fixed"|"percent"}
   --expired-time: string # Coupon's expire time (end time). (format: date-time)
   issued_time: string # Coupon's issued time (start time). (format: date-time)
   --restrictions: list # Coupon restrictions. — item shape: {type: "discounts-per-redemption"|"minimum-order-amount"|"paid-by-time"|"redemptions-per-customer"|"restrict-to-invoices"|"restrict-to-plans"|"restrict-to-products"|"restrict-to-subscriptions"|"total-redemptions"}
-  --updated-time: any # Coupon updated time.
-]: any -> record<_links: table<rel: string>, createdTime: record, description: string, discount: record<type: string>, expiredTime: string, id: record, issuedTime: string, redemptionsCount: int, restrictions: table<type: string>, status: string, updatedTime: record> {
+  --updated-time: string # Coupon updated time. (format: date-time)
+]: any -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, description: string, discount: record<type: string>, expiredTime: string, id: string, issuedTime: string, redemptionsCount: int, restrictions: table<type: string>, status: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/coupons" $auth.query)
   let req_body = {"createdTime": $created_time, "description": $description, "discount": $discount, "expiredTime": $expired_time, "issuedTime": $issued_time, "restrictions": $restrictions, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1423,18 +1490,21 @@ export def "get-coupon-redemption-collection" [
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --q: string # The partial search of the text fields.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<_links: list<record>, additionalRestrictions: list<record>, canceledTime: record, couponId: record, createdTime: record, customerId: record, id: record> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, additionalRestrictions: list<record>, canceledTime: string, couponId: string, createdTime: string, customerId: string, id: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/coupons-redemptions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1449,8 +1519,6 @@ export def "get-coupon-redemption-collection" [
 #
 # POST /coupons-redemptions
 # operationId: PostCouponRedemption
-# --_links item shape: {rel: "self", href: string}
-# --additionalRestrictions item shape: {type: "discounts-per-redemption"|"minimum-order-amount"|"paid-by-time"|"restrict-to-invoices"|"restrict-to-plans"|"restrict-to-products"|"restrict-to-subscriptions"}
 export def "post-coupon-redemption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1463,19 +1531,19 @@ export def "post-coupon-redemption" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --additional-restrictions: list # Additional restrictions for coupon's redemptions. — item shape: {type: "discounts-per-redemption"|"minimum-order-amount"|"paid-by-time"|"restrict-to-invoices"|"restrict-to-plans"|"restrict-to-products"|"restrict-to-subscriptions"}
-  --coupon-id: any # Coupon's ID.
-  --customer-id: any # Customer's ID.
-]: any -> record<_links: table<rel: string>, additionalRestrictions: table<type: string>, canceledTime: record, couponId: record, createdTime: record, customerId: record, id: record> {
+  --coupon-id: string # Coupon's ID.
+  --customer-id: string # Customer's ID.
+]: any -> oneof<record<_links: table<rel: string, href: string>, additionalRestrictions: table<type: string>, canceledTime: string, couponId: string, createdTime: string, customerId: string, id: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/coupons-redemptions" $auth.query)
   let req_body = {"additionalRestrictions": $additional_restrictions, "couponId": $coupon_id, "customerId": $customer_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1506,15 +1574,15 @@ export def "get-coupon-redemption" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, additionalRestrictions: table<type: string>, canceledTime: record, couponId: record, createdTime: record, customerId: record, id: record> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, additionalRestrictions: table<type: string>, canceledTime: string, couponId: string, createdTime: string, customerId: string, id: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/coupons-redemptions/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1551,9 +1619,9 @@ export def "post-coupon-redemption-cancellation" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/coupons-redemptions/{id}/cancel") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1584,15 +1652,15 @@ export def "get-coupon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, createdTime: record, description: string, discount: record<type: string>, expiredTime: string, id: record, issuedTime: string, redemptionsCount: int, restrictions: table<type: string>, status: string, updatedTime: record> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, description: string, discount: record<type: string>, expiredTime: string, id: string, issuedTime: string, redemptionsCount: int, restrictions: table<type: string>, status: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/coupons/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1611,9 +1679,6 @@ export def "get-coupon" [
 #
 # PUT /coupons/{id}
 # operationId: PutCoupon
-# --_links item shape: {rel: "self", href: string}
-# --discount shape: {type: "fixed"|"percent"}
-# --restrictions item shape: {type: "discounts-per-redemption"|"minimum-order-amount"|"paid-by-time"|"redemptions-per-customer"|"restrict-to-invoices"|"restrict-to-plans"|"restrict-to-products"|"restrict-to-subscriptions"|"total-redemptions"}
 export def "put-coupon" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1626,25 +1691,25 @@ export def "put-coupon" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Coupon created time.
+  --created-time: string # Coupon created time. (format: date-time)
   --description: string # Your coupon description. When it is not empty this is used for invoice discount item description, otherwise the item's description uses coupon's ID like 'Coupon "COUPON-ID"'.
   discount: record # shape: {type: "fixed"|"percent"}
   --expired-time: string # Coupon's expire time (end time). (format: date-time)
   issued_time: string # Coupon's issued time (start time). (format: date-time)
   --restrictions: list # Coupon restrictions. — item shape: {type: "discounts-per-redemption"|"minimum-order-amount"|"paid-by-time"|"redemptions-per-customer"|"restrict-to-invoices"|"restrict-to-plans"|"restrict-to-products"|"restrict-to-subscriptions"|"total-redemptions"}
-  --updated-time: any # Coupon updated time.
-]: any -> record<_links: table<rel: string>, createdTime: record, description: string, discount: record<type: string>, expiredTime: string, id: record, issuedTime: string, redemptionsCount: int, restrictions: table<type: string>, status: string, updatedTime: record> {
+  --updated-time: string # Coupon updated time. (format: date-time)
+]: any -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, description: string, discount: record<type: string>, expiredTime: string, id: string, issuedTime: string, redemptionsCount: int, restrictions: table<type: string>, status: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/coupons/{id}") $auth.query)
   let req_body = {"createdTime": $created_time, "description": $description, "discount": $discount, "expiredTime": $expired_time, "issuedTime": $issued_time, "restrictions": $restrictions, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1676,18 +1741,18 @@ export def "post-coupon-expiration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   expired_time: string # The coupon's expiry time, must be greater than the issued time. Null or empty string will immediately expire the coupon. (format: date-time)
-]: any -> record<_links: table<rel: string>, createdTime: record, description: string, discount: record<type: string>, expiredTime: string, id: record, issuedTime: string, redemptionsCount: int, restrictions: table<type: string>, status: string, updatedTime: record> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, description: string, discount: record<type: string>, expiredTime: string, id: string, issuedTime: string, redemptionsCount: int, restrictions: table<type: string>, status: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/coupons/{id}/expiration") $auth.query)
   let req_body = {"expiredTime": $expired_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1718,13 +1783,16 @@ export def "get-credential-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
-]: nothing -> table<_links: list<any>, customerId: string, expiredTime: string, id: record, password: string, username: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<any>, customerId: string, expiredTime: string, id: string, password: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/credentials" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1758,17 +1826,17 @@ export def "post-credential" [
   --expired-time: string # The credential's expired time. (format: date-time)
   password: string # The credential's password. (format: password)
   username: string # Credential's username.
-]: any -> record<_links: list<any>, customerId: string, expiredTime: string, id: record, password: string, username: string> {
+]: any -> oneof<record<_links: list<any>, customerId: string, expiredTime: string, id: string, password: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credentials" $auth.query)
   let req_body = {"customerId": $customer_id, "expiredTime": $expired_time, "password": $password, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -1805,9 +1873,9 @@ export def "delete-credential" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credentials/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -1838,15 +1906,15 @@ export def "get-credential" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: list<any>, customerId: string, expiredTime: string, id: record, password: string, username: string> {
+]: nothing -> oneof<record<_links: list<any>, customerId: string, expiredTime: string, id: string, password: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credentials/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1881,18 +1949,18 @@ export def "put-credential" [
   --expired-time: string # The credential's expired time. (format: date-time)
   password: string # The credential's password. (format: password)
   username: string # Credential's username.
-]: any -> record<_links: list<any>, customerId: string, expiredTime: string, id: record, password: string, username: string> {
+]: any -> oneof<record<_links: list<any>, customerId: string, expiredTime: string, id: string, password: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/credentials/{id}") $auth.query)
   let req_body = {"customerId": $customer_id, "expiredTime": $expired_time, "password": $password, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -1912,7 +1980,7 @@ export def "put-credential" [
 # GET /custom-fields/{resource}
 # operationId: GetCustomFieldCollection
 export def "get-custom-field-collection" [
-  resource: any
+  resource: string@resource-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1924,14 +1992,17 @@ export def "get-custom-field-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
-]: nothing -> table<_links: list<record>, additionalSchema: any, description: string, name: string, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, additionalSchema: any, description: string, name: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({resource: (encode-path-segment $resource)} | format pattern "/custom-fields/{resource}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1951,7 +2022,7 @@ export def "get-custom-field-collection" [
 # GET /custom-fields/{resource}/{name}
 # operationId: GetCustomField
 export def "get-custom-field" [
-  resource: string
+  resource: string@resource-completer
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1963,16 +2034,16 @@ export def "get-custom-field" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, additionalSchema: any, description: string, name: string, type: string> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, additionalSchema: any, description: string, name: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({resource: (encode-path-segment $resource), name: (encode-path-segment $name)} | format pattern "/custom-fields/{resource}/{name}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -1991,9 +2062,8 @@ export def "get-custom-field" [
 #
 # PUT /custom-fields/{resource}/{name}
 # operationId: PutCustomField
-# --_links item shape: {rel: "self", href: string}
 export def "put-custom-field" [
-  resource: string
+  resource: string@resource-completer
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2008,7 +2078,7 @@ export def "put-custom-field" [
   --additional-schema: any # Additional parameters which can be added according to type: Parameter Name | Types | Description -------------- | ------------- | ------------- allowedValues | string, array | List of allowed values maxLength | string | Maximum allowed length for the string, 255 by default, up to 4000 The additional schema adds additional constrains for values.
   --description: string # The custom field description.
   type: string@type-completer-1 # Type value | Description ------------- | ------------- array | An array of strings up to 255 characters, maximum size is 1000 elements boolean | true or false date | String of format "full-date" (YYYY-MM-DD) from RFC-3339 (full-date) datetime | String of format "date-time" (YYYY-MM-DDTHH:MM:SSZ) from RFC-3339 (date-time) integer | Cardinal value of -2^31..2^31-1 number | Float value. It can take cardinal values also which are interpreted as float string | Regular string up to 255 characters monetary | A map of 3-letters currency code and amount, e.g. {"currency": "EUR", "amount": 25.30} The type cannot be changed.
-]: any -> record<_links: table<rel: string>, additionalSchema: any, description: string, name: string, type: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, additionalSchema: any, description: string, name: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -2016,11 +2086,11 @@ export def "put-custom-field" [
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({resource: (encode-path-segment $resource), name: (encode-path-segment $name)} | format pattern "/custom-fields/{resource}/{name}") $auth.query)
   let req_body = {"additionalSchema": $additional_schema, "description": $description, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2052,13 +2122,16 @@ export def "get-customer-timeline-custom-event-type-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-]: nothing -> table<_links: list<record>, createdTime: record, id: record, name: string, updatedTime: record> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, createdTime: string, id: string, name: string, updatedTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer-timeline-custom-events" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2077,7 +2150,6 @@ export def "get-customer-timeline-custom-event-type-collection" [
 #
 # POST /customer-timeline-custom-events
 # operationId: PostCustomerTimelineCustomEventType
-# --_links item shape: {rel: "self", href: string}
 export def "post-customer-timeline-custom-event-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2089,20 +2161,20 @@ export def "post-customer-timeline-custom-event-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Customer Timeline Custom event created time.
+  --created-time: string # Customer Timeline Custom event created time. (format: date-time)
   name: string # Customer Timeline Custom Event type name. It must not be similar to any Rebilly system event.
-  --updated-time: any # Customer Timeline Custom event updated time.
-]: any -> record<_links: table<rel: string>, createdTime: record, id: record, name: string, updatedTime: record> {
+  --updated-time: string # Customer Timeline Custom event updated time. (format: date-time)
+]: any -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, id: string, name: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/customer-timeline-custom-events" $auth.query)
   let req_body = {"createdTime": $created_time, "name": $name, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2133,15 +2205,15 @@ export def "get-customer-timeline-custom-event-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, createdTime: record, id: record, name: string, updatedTime: record> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, createdTime: string, id: string, name: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customer-timeline-custom-events/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2173,13 +2245,16 @@ export def "get-customer-timeline-event-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-]: nothing -> table<_links: list<record>, customData: record, customEventType: string, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, customData: record, customEventType: string, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer-timeline-events" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2214,18 +2289,21 @@ export def "get-customer-collection" [
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
   --fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<_embedded: list<any>, _links: list<any>, averageValue: record<amount: float, amountUsd: float, currency: record>, createdTime: record, customFields: record, defaultPaymentInstrument: record, email: string, firstName: string, id: record, invoiceCount: int, lastName: string, lastPaymentTime: record, lifetimeRevenue: record<amount: float, amountUsd: float, currency: record>, paymentCount: int, paymentToken: string, primaryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, revision: int, tags: list<record>, updatedTime: record, websiteId: record> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_embedded: list<any>, _links: list<any>, averageValue: record<amount: float, amountUsd: float, currency: string>, createdTime: string, customFields: record, defaultPaymentInstrument: record, email: string, firstName: string, id: string, invoiceCount: int, lastName: string, lastPaymentTime: string, lifetimeRevenue: record<amount: float, amountUsd: float, currency: string>, paymentCount: int, paymentToken: string, primaryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, revision: int, tags: list<record>, updatedTime: string, websiteId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/customers" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "expand": $expand, "fields": $fields, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "expand": $expand, "fields": $fields, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2240,11 +2318,6 @@ export def "get-customer-collection" [
 #
 # POST /customers
 # operationId: PostCustomer
-# --averageValue shape: {amount?: float, amountUsd?: float, currency?: any}
-# --defaultPaymentInstrument shape: {method?: "payment-card"|"ach"|"paypal", paymentInstrumentId?: any, receivedBy?: string, reference?: string}
-# --lifetimeRevenue shape: {amount?: float, amountUsd?: float, currency?: any}
-# --primaryAddress shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
-# --tags item shape: {createdTime?: any, name: string, updatedTime?: any}
 export def "post-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2256,25 +2329,25 @@ export def "post-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The customer created time.
+  --created-time: string # The customer created time. (format: date-time)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  --default-payment-instrument: record # shape: {method?: "payment-card"|"ach"|"paypal", paymentInstrumentId?: any, receivedBy?: string, reference?: string}
-  --last-payment-time: any # The most recent time of an approved payment for the customer.
+  --default-payment-instrument: record # shape: {method: "payment-card"|"ach"|"paypal", paymentInstrumentId?: string, receivedBy?: string, reference?: string}
+  --last-payment-time: string # The most recent time of an approved payment for the customer. (format: date-time)
   --payment-token: string # A write-only payment token; if supplied, it will be converted into a payment instrument and be set as the `defaultPaymentInstrument`. The value of this property will override the `defaultPaymentInstrument` in the case that both are supplied. The token may only be used once before it is expired.
   --primary-address: record # shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
-  --updated-time: any # The customer updated time.
-  --website-id: any # The website's ID.
-]: any -> any {
+  --updated-time: string # The customer updated time. (format: date-time)
+  --website-id: string # The website's ID.
+]: any -> oneof<record<_embedded: list<any>, _links: list<any>, averageValue: record<amount: float, amountUsd: float, currency: string>, createdTime: string, customFields: record, defaultPaymentInstrument: record, email: string, firstName: string, id: string, invoiceCount: int, lastName: string, lastPaymentTime: string, lifetimeRevenue: record<amount: float, amountUsd: float, currency: string>, paymentCount: int, paymentToken: string, primaryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, revision: int, tags: table<_links: list, createdTime: string, id: string, name: string, updatedTime: string>, updatedTime: string, websiteId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/customers" $auth.query)
   let req_body = {"createdTime": $created_time, "customFields": $custom_fields, "defaultPaymentInstrument": $default_payment_instrument, "lastPaymentTime": $last_payment_time, "paymentToken": $payment_token, "primaryAddress": $primary_address, "updatedTime": $updated_time, "websiteId": $website_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2304,18 +2377,19 @@ export def "delete-customer" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --target-customer-id: string # The customer identifier to get the data of the deleted duplicate customer.
+  --target-customer-id: string # The customer identifier to get the data of the deleted duplicate customer. (required)
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
+  if ($target_customer_id == null) { error make --unspanned { msg: "required query parameter 'targetCustomerId' missing: pass --target-customer-id" } }
   let qp = [(serialize-qp "targetCustomerId" $target_customer_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2335,7 +2409,7 @@ export def "delete-customer" [
 # GET /customers/{id}
 # operationId: GetCustomer
 export def "get-customer" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2347,14 +2421,17 @@ export def "get-customer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
   --fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
-]: nothing -> record<_embedded: list<any>, _links: list<any>, averageValue: record<amount: float, amountUsd: float, currency: record>, createdTime: record, customFields: record, defaultPaymentInstrument: record, email: string, firstName: string, id: record, invoiceCount: int, lastName: string, lastPaymentTime: record, lifetimeRevenue: record<amount: float, amountUsd: float, currency: record>, paymentCount: int, paymentToken: string, primaryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, revision: int, tags: table<_links: list, createdTime: record, id: record, name: string, updatedTime: record>, updatedTime: record, websiteId: record> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<record<_embedded: list<any>, _links: list<any>, averageValue: record<amount: float, amountUsd: float, currency: string>, createdTime: string, customFields: record, defaultPaymentInstrument: record, email: string, firstName: string, id: string, invoiceCount: int, lastName: string, lastPaymentTime: string, lifetimeRevenue: record<amount: float, amountUsd: float, currency: string>, paymentCount: int, paymentToken: string, primaryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, revision: int, tags: table<_links: list, createdTime: string, id: string, name: string, updatedTime: string>, updatedTime: string, websiteId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2373,11 +2450,6 @@ export def "get-customer" [
 #
 # PUT /customers/{id}
 # operationId: PutCustomer
-# --averageValue shape: {amount?: float, amountUsd?: float, currency?: any}
-# --defaultPaymentInstrument shape: {method?: "payment-card"|"ach"|"paypal", paymentInstrumentId?: any, receivedBy?: string, reference?: string}
-# --lifetimeRevenue shape: {amount?: float, amountUsd?: float, currency?: any}
-# --primaryAddress shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
-# --tags item shape: {createdTime?: any, name: string, updatedTime?: any}
 export def "put-customer" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2390,26 +2462,26 @@ export def "put-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The customer created time.
+  --created-time: string # The customer created time. (format: date-time)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  --default-payment-instrument: record # shape: {method?: "payment-card"|"ach"|"paypal", paymentInstrumentId?: any, receivedBy?: string, reference?: string}
-  --last-payment-time: any # The most recent time of an approved payment for the customer.
+  --default-payment-instrument: record # shape: {method: "payment-card"|"ach"|"paypal", paymentInstrumentId?: string, receivedBy?: string, reference?: string}
+  --last-payment-time: string # The most recent time of an approved payment for the customer. (format: date-time)
   --payment-token: string # A write-only payment token; if supplied, it will be converted into a payment instrument and be set as the `defaultPaymentInstrument`. The value of this property will override the `defaultPaymentInstrument` in the case that both are supplied. The token may only be used once before it is expired.
   --primary-address: record # shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
-  --updated-time: any # The customer updated time.
-  --website-id: any # The website's ID.
-]: any -> any {
+  --updated-time: string # The customer updated time. (format: date-time)
+  --website-id: string # The website's ID.
+]: any -> oneof<record<_embedded: list<any>, _links: list<any>, averageValue: record<amount: float, amountUsd: float, currency: string>, createdTime: string, customFields: record, defaultPaymentInstrument: record, email: string, firstName: string, id: string, invoiceCount: int, lastName: string, lastPaymentTime: string, lifetimeRevenue: record<amount: float, amountUsd: float, currency: string>, paymentCount: int, paymentToken: string, primaryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, revision: int, tags: table<_links: list, createdTime: string, id: string, name: string, updatedTime: string>, updatedTime: string, websiteId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}") $auth.query)
   let req_body = {"createdTime": $created_time, "customFields": $custom_fields, "defaultPaymentInstrument": $default_payment_instrument, "lastPaymentTime": $last_payment_time, "paymentToken": $payment_token, "primaryAddress": $primary_address, "updatedTime": $updated_time, "websiteId": $website_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2446,9 +2518,9 @@ export def "delete-customer-lead-source" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/lead-source") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2479,15 +2551,15 @@ export def "get-customer-lead-source" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: list<any>, affiliate: string, campaign: string, clickId: string, content: string, createdTime: record, medium: string, path: string, referrer: string, salesAgent: string, source: string, subAffiliate: string, term: string, original: record<_links: list<any>, affiliate: string, campaign: string, clickId: string, content: string, createdTime: record, medium: string, path: string, referrer: string, salesAgent: string, source: string, subAffiliate: string, term: string>> {
+]: nothing -> oneof<record<_links: list<any>, affiliate: string, campaign: string, clickId: string, content: string, createdTime: string, medium: string, path: string, referrer: string, salesAgent: string, source: string, subAffiliate: string, term: string, original: record<_links: list<any>, affiliate: string, campaign: string, clickId: string, content: string, createdTime: string, medium: string, path: string, referrer: string, salesAgent: string, source: string, subAffiliate: string, term: string>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/lead-source") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2522,26 +2594,26 @@ export def "put-customer-lead-source" [
   --campaign: string # Lead source campaign (eg go-big-123).
   --click-id: string # Lead source click id (may come from an ad server).
   --content: string # Lead source content (eg smiley faces).
-  --created-time: any # Lead source created time.
+  --created-time: string # Lead source created time. (format: date-time)
   --medium: string # Lead source medium (eg search, display).
   --path: string # Lead source path url (eg www.example.com/some/landing/path).
   --referrer: string # Lead source [`referer` url](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referer) as determined (eg www.example.com/some/landing/path).
   --sales-agent: string # Lead source sales agent (eg James Bond).
-  --body-source: string # Lead source origin (eg google, yahoo).
+  --source: string # Lead source origin (eg google, yahoo).
   --sub-affiliate: string # Lead source sub-affiliate also called a sub-id or click id in some circles (eg 123456).
   --term: string # Lead source term (eg salt shakers).
-]: any -> record<_links: list<any>, affiliate: string, campaign: string, clickId: string, content: string, createdTime: record, medium: string, path: string, referrer: string, salesAgent: string, source: string, subAffiliate: string, term: string, original: record<_links: list<any>, affiliate: string, campaign: string, clickId: string, content: string, createdTime: record, medium: string, path: string, referrer: string, salesAgent: string, source: string, subAffiliate: string, term: string>> {
+]: any -> oneof<record<_links: list<any>, affiliate: string, campaign: string, clickId: string, content: string, createdTime: string, medium: string, path: string, referrer: string, salesAgent: string, source: string, subAffiliate: string, term: string, original: record<_links: list<any>, affiliate: string, campaign: string, clickId: string, content: string, createdTime: string, medium: string, path: string, referrer: string, salesAgent: string, source: string, subAffiliate: string, term: string>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/lead-source") $auth.query)
-  let req_body = {"affiliate": $affiliate, "campaign": $campaign, "clickId": $click_id, "content": $content, "createdTime": $created_time, "medium": $medium, "path": $path, "referrer": $referrer, "salesAgent": $sales_agent, "source": $body_source, "subAffiliate": $sub_affiliate, "term": $term} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"affiliate": $affiliate, "campaign": $campaign, "clickId": $click_id, "content": $content, "createdTime": $created_time, "medium": $medium, "path": $path, "referrer": $referrer, "salesAgent": $sales_agent, "source": $source, "subAffiliate": $sub_affiliate, "term": $term} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -2561,7 +2633,7 @@ export def "put-customer-lead-source" [
 # GET /customers/{id}/timeline
 # operationId: GetCustomerTimelineCollection
 export def "get-customer-timeline-collection" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2574,20 +2646,23 @@ export def "get-customer-timeline-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --q: string # The partial search of the text fields.
-]: nothing -> table<_links: list<record>, customData: record, customEventType: string, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, customData: record, customEventType: string, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/timeline") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2602,8 +2677,6 @@ export def "get-customer-timeline-collection" [
 #
 # POST /customers/{id}/timeline
 # operationId: PostCustomerTimeline
-# --_links item shape: {rel: "self", href: string}
-# --extraData shape: {actions?: list, author?: record, links?: list, mentions?: record, tables?: list}
 export def "post-customer-timeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2619,20 +2692,20 @@ export def "post-customer-timeline" [
   --custom-data: record # Timeline custom event data. Used with `custom-event` type. Will be transformed to `extraData` two-column table in response. (e.g. {customAttribute: customValue, otherAttribute: otherValue})
   --custom-event-type: string # Timeline custom event type. Used with `custom-event` type. Must be defined using [Customer Timeline custom event API](#operation/PostCustomerTimelineCustomEventType). (nullable)
   --message: string # The message that describes the message details.
-  --occurred-time: any # Timeline message time.
+  --occurred-time: string # Timeline message time. (format: date-time)
   --type: string@type-completer-2 # Timeline message type.
-]: any -> record<_links: table<rel: string>, customData: record, customEventType: string, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, customData: record, customEventType: string, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/timeline") $auth.query)
   let req_body = {"customData": $custom_data, "customEventType": $custom_event_type, "message": $message, "occurredTime": $occurred_time, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2671,9 +2744,9 @@ export def "delete-customer-timeline" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/customers/{id}/timeline/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -2705,16 +2778,16 @@ export def "get-customer-timeline" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, customData: record, customEventType: string, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, customData: record, customEventType: string, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/customers/{id}/timeline/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2734,7 +2807,7 @@ export def "get-customer-timeline" [
 # GET /customers/{id}/upcoming-invoices
 # operationId: GetCustomerUpcomingInvoiceCollection
 export def "get-customer-upcoming-invoice-collection" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2745,14 +2818,17 @@ export def "get-customer-upcoming-invoice-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, discountAmount: float, discounts: list<record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: list<record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list, afterRetryEndPolicies: list, attempts: list>, revision: int, transactions: list<record>, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, discountAmount: float, discounts: list<record>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: list<record>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list, afterRetryEndPolicies: list, attempts: list>, revision: int, transactions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/customers/{id}/upcoming-invoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2783,15 +2859,15 @@ export def "post-digital-wallet-validation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   type: string@type-completer-3 # Type of the digital wallet to validate.
-]: any -> record<type: string> {
+]: any -> oneof<record<type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/digital-wallets/validation" $auth.query)
   let req_body = {"type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let req = {
     method: "post"
     url: $full_url
@@ -2821,22 +2897,25 @@ export def "get-dispute-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<_embedded: list<any>, _links: list<any>, acquirerReferenceNumber: string, amount: float, caseId: string, category: string, createdTime: record, currency: record, customerId: string, deadlineTime: string, id: record, postedTime: string, rawResponse: string, reasonCode: string, resolvedTime: record, status: string, transactionId: string, type: string, updatedTime: record> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_embedded: list<any>, _links: list<any>, acquirerReferenceNumber: string, amount: float, caseId: string, category: string, createdTime: string, currency: string, customerId: string, deadlineTime: string, id: string, postedTime: string, rawResponse: string, reasonCode: string, resolvedTime: string, status: string, transactionId: string, type: string, updatedTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/disputes" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "sort": $qp_sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
+    query: ({"filter": $filter, "sort": $sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2865,27 +2944,27 @@ export def "post-dispute" [
   --acquirer-reference-number: string # The dispute's acquirer reference number.
   amount: float # The dispute amount. (format: double)
   --case-id: string # The case ID for the dispute.
-  --created-time: any # Dispute created time.
-  currency: any
+  --created-time: string # Dispute created time. (format: date-time)
+  currency: string # ISO 4217 alphabetic currency code.
   --deadline-time: string # Dispute deadline time. (format: date-time)
   posted_time: string # Dispute posted time. (format: date-time)
   reason_code: string@reason-code-completer # The dispute's reason code.
-  --resolved-time: any # Dispute resolved time.
+  --resolved-time: string # Dispute resolved time. (format: date-time)
   status: string@status-completer # The dispute's status.
   transaction_id: string # The dispute's transaction ID.
   type: string@type-completer-4 # The dispute's type.
-  --updated-time: any # Dispute updated time.
-]: any -> record<_embedded: list<any>, _links: list<any>, acquirerReferenceNumber: string, amount: float, caseId: string, category: string, createdTime: record, currency: record, customerId: string, deadlineTime: string, id: record, postedTime: string, rawResponse: string, reasonCode: string, resolvedTime: record, status: string, transactionId: string, type: string, updatedTime: record> {
+  --updated-time: string # Dispute updated time. (format: date-time)
+]: any -> oneof<record<_embedded: list<any>, _links: list<any>, acquirerReferenceNumber: string, amount: float, caseId: string, category: string, createdTime: string, currency: string, customerId: string, deadlineTime: string, id: string, postedTime: string, rawResponse: string, reasonCode: string, resolvedTime: string, status: string, transactionId: string, type: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/disputes" $auth.query)
   let req_body = {"acquirerReferenceNumber": $acquirer_reference_number, "amount": $amount, "caseId": $case_id, "createdTime": $created_time, "currency": $currency, "deadlineTime": $deadline_time, "postedTime": $posted_time, "reasonCode": $reason_code, "resolvedTime": $resolved_time, "status": $status, "transactionId": $transaction_id, "type": $type, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -2916,15 +2995,15 @@ export def "get-dispute" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_embedded: list<any>, _links: list<any>, acquirerReferenceNumber: string, amount: float, caseId: string, category: string, createdTime: record, currency: record, customerId: string, deadlineTime: string, id: record, postedTime: string, rawResponse: string, reasonCode: string, resolvedTime: record, status: string, transactionId: string, type: string, updatedTime: record> {
+]: nothing -> oneof<record<_embedded: list<any>, _links: list<any>, acquirerReferenceNumber: string, amount: float, caseId: string, category: string, createdTime: string, currency: string, customerId: string, deadlineTime: string, id: string, postedTime: string, rawResponse: string, reasonCode: string, resolvedTime: string, status: string, transactionId: string, type: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/disputes/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -2958,28 +3037,28 @@ export def "put-dispute" [
   --acquirer-reference-number: string # The dispute's acquirer reference number.
   amount: float # The dispute amount. (format: double)
   --case-id: string # The case ID for the dispute.
-  --created-time: any # Dispute created time.
-  currency: any
+  --created-time: string # Dispute created time. (format: date-time)
+  currency: string # ISO 4217 alphabetic currency code.
   --deadline-time: string # Dispute deadline time. (format: date-time)
   posted_time: string # Dispute posted time. (format: date-time)
   reason_code: string@reason-code-completer # The dispute's reason code.
-  --resolved-time: any # Dispute resolved time.
+  --resolved-time: string # Dispute resolved time. (format: date-time)
   status: string@status-completer # The dispute's status.
   transaction_id: string # The dispute's transaction ID.
   type: string@type-completer-4 # The dispute's type.
-  --updated-time: any # Dispute updated time.
-]: any -> record<_embedded: list<any>, _links: list<any>, acquirerReferenceNumber: string, amount: float, caseId: string, category: string, createdTime: record, currency: record, customerId: string, deadlineTime: string, id: record, postedTime: string, rawResponse: string, reasonCode: string, resolvedTime: record, status: string, transactionId: string, type: string, updatedTime: record> {
+  --updated-time: string # Dispute updated time. (format: date-time)
+]: any -> oneof<record<_embedded: list<any>, _links: list<any>, acquirerReferenceNumber: string, amount: float, caseId: string, category: string, createdTime: string, currency: string, customerId: string, deadlineTime: string, id: string, postedTime: string, rawResponse: string, reasonCode: string, resolvedTime: string, status: string, transactionId: string, type: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/disputes/{id}") $auth.query)
   let req_body = {"acquirerReferenceNumber": $acquirer_reference_number, "amount": $amount, "caseId": $case_id, "createdTime": $created_time, "currency": $currency, "deadlineTime": $deadline_time, "postedTime": $posted_time, "reasonCode": $reason_code, "resolvedTime": $resolved_time, "status": $status, "transactionId": $transaction_id, "type": $type, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3014,18 +3093,21 @@ export def "get-file-collection" [
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
   --fields: string # Limit the returned fields to the list specified, separated by comma. Note that id is always returned.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<_links: list<any>, createdTime: record, description: string, extension: string, height: int, id: record, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: record, width: int> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<any>, createdTime: string, description: string, extension: string, height: int, id: string, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: string, width: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/files" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "expand": $expand, "fields": $fields, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "expand": $expand, "fields": $fields, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3057,17 +3139,17 @@ export def "post-file" [
   --name: string # The file name used for downloading. (e.g. logo.png)
   --tags: list<string> # The tags list. (e.g. [test, tags])
   --url: string # The URL of the file to upload. (e.g. https://blog.rebilly.com/wp-content/uploads/2017/09/rb_LogoInverted_Small.png)
-]: any -> record<_links: list<any>, createdTime: record, description: string, extension: string, height: int, id: record, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: record, width: int> {
+]: any -> oneof<record<_links: list<any>, createdTime: string, description: string, extension: string, height: int, id: string, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: string, width: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/files" $auth.query)
   let req_body = {"description": $description, "file": $file, "isPublic": $is_public, "name": $name, "tags": $tags, "url": $url} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3104,9 +3186,9 @@ export def "delete-file" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/files/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3137,15 +3219,15 @@ export def "get-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: list<any>, createdTime: record, description: string, extension: string, height: int, id: record, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: record, width: int> {
+]: nothing -> oneof<record<_links: list<any>, createdTime: string, description: string, extension: string, height: int, id: string, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: string, width: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/files/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3176,25 +3258,25 @@ export def "put-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The upload date/time.
+  --created-time: string # The upload date/time. (format: date-time)
   --description: string # The File description.
   --extension: string # The File extension.
   --is-public: oneof<nothing, bool> # Is the file available publicly (without authentication). If true, the permalink in the _links section contains the public URL.
   --name: string # Original File name.
   --tags: list<string> # The tags list.
-  --updated-time: any # The latest update date/time.
-]: any -> record<_links: list<any>, createdTime: record, description: string, extension: string, height: int, id: record, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: record, width: int> {
+  --updated-time: string # The latest update date/time. (format: date-time)
+]: any -> oneof<record<_links: list<any>, createdTime: string, description: string, extension: string, height: int, id: string, isPublic: bool, mime: string, name: string, sha1: string, size: int, tags: list<string>, updatedTime: string, width: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/files/{id}") $auth.query)
   let req_body = {"createdTime": $created_time, "description": $description, "extension": $extension, "isPublic": $is_public, "name": $name, "tags": $tags, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3233,9 +3315,9 @@ export def "get-file-download" [
   let qp = [(serialize-qp "imageSize" $image_size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/files/{id}/download") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3256,7 +3338,7 @@ export def "get-file-download" [
 # operationId: GetFileDownloadExtension
 export def "get-file-download-extension" [
   id: string
-  extension: string
+  extension: string@extension-completer
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3274,9 +3356,9 @@ export def "get-file-download-extension" [
   if ($extension | is-empty) { error make --unspanned { msg: "path parameter 'extension' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), extension: (encode-path-segment $extension)} | format pattern "/files/{id}/download{extension}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3306,22 +3388,25 @@ export def "get-invoice-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, discountAmount: float, discounts: list<record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: list<record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list, afterRetryEndPolicies: list, attempts: list>, revision: int, transactions: list<record>, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, discountAmount: float, discounts: list<record>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: list<record>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list, afterRetryEndPolicies: list, attempts: list>, revision: int, transactions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/invoices" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "sort": $qp_sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
+    query: ({"filter": $filter, "sort": $sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3336,12 +3421,6 @@ export def "get-invoice-collection" [
 #
 # POST /invoices
 # operationId: PostInvoice
-# --discounts item shape: {amount?: float, couponId?: any, description?: string, redemptionId?: any}
-# --items item shape: {createdTime?: any, description?: string, periodEndTime?: string, periodNumber?: int, periodStartTime?: string, productId?: any, quantity?: int, type: "debit"|"credit", unitPrice: float, updatedTime?: any}
-# --shipping shape: {calculator: "manual"|"rebilly"}
-# --tax shape: {amount?: int, calculator: "manual"|"rebilly"}
-# --retryInstruction shape: {afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list}
-# --transactions item shape: {3ds?: any, billingAddress?: any, createdTime?: any, customFields?: record, customerId?: any, description?: string, paymentInstrument?: record, processedTime?: any, redirectUrl?: string, requestId?: string, updatedTime?: any, isMerchantInitiated?: bool, isProcessedOutside?: bool, method?: any, notificationUrl?: string, orderId?: string, retryInstruction?: record, riskMetadata?: any, scheduledTime?: string, velocity?: int}
 export def "post-invoice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3353,36 +3432,36 @@ export def "post-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --abandoned-time: any # Invoice abandoned time.
+  --abandoned-time: string # Invoice abandoned time. (format: date-time)
   --autopay-scheduled-time: string # Invoice autopay scheduled time. (format: date-time)
-  --billing-address: any # Invoice's billing address.
-  --created-time: any # Invoice created time.
-  currency: any
-  --delivery-address: any # Invoice's delivery address.
-  --due-time: any # Invoice due time.
-  --issued-time: any # Invoice issued time.
+  --billing-address: record # Invoice's billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  --created-time: string # Invoice created time. (format: date-time)
+  currency: string # ISO 4217 alphabetic currency code.
+  --delivery-address: record # Invoice's delivery address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  --due-time: string # Invoice due time. (format: date-time)
+  --issued-time: string # Invoice issued time. (format: date-time)
   --notes: string # Notes for the customer which will be displayed on the invoice.
-  --paid-time: any # Invoice paid time.
+  --paid-time: string # Invoice paid time. (format: date-time)
   --po-number: string # Purchase order number which will be displayed on the invoice. (nullable, e.g. PO123456)
   --shipping: record # Invoice shipping. — shape: {calculator: "manual"|"rebilly"}
   --tax: record # Invoice taxes. — shape: {amount?: int, calculator: "manual"|"rebilly"}
-  --updated-time: any # Invoice updated time.
-  --voided-time: any # Invoice voided time.
-  website_id: any # The website ID.
-  customer_id: any # The сustomer's ID.
-  --due-reminder-time: any # Time past due reminder event will be triggered. (nullable)
+  --updated-time: string # Invoice updated time. (format: date-time)
+  --voided-time: string # Invoice voided time. (format: date-time)
+  website_id: string # The website ID.
+  customer_id: string # The сustomer's ID.
+  --due-reminder-time: string # Time past due reminder event will be triggered. (nullable, format: date-time)
   --retry-instruction: record # The invoice retry instruction. — shape: {afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list}
-]: any -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: any -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/invoices" $auth.query)
   let req_body = {"abandonedTime": $abandoned_time, "autopayScheduledTime": $autopay_scheduled_time, "billingAddress": $billing_address, "createdTime": $created_time, "currency": $currency, "deliveryAddress": $delivery_address, "dueTime": $due_time, "issuedTime": $issued_time, "notes": $notes, "paidTime": $paid_time, "poNumber": $po_number, "shipping": $shipping, "tax": $tax, "updatedTime": $updated_time, "voidedTime": $voided_time, "websiteId": $website_id, "customerId": $customer_id, "dueReminderTime": $due_reminder_time, "retryInstruction": $retry_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3402,7 +3481,7 @@ export def "post-invoice" [
 # GET /invoices/{id}
 # operationId: GetInvoice
 export def "get-invoice" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3414,17 +3493,18 @@ export def "get-invoice" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-  --hdr-accept: string@accept-completer # The response media type.
-]: nothing -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+  --hdr-accept: string@accept-completer # The response media type. (default: application/json) (spec name: Accept)
+]: nothing -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let extra_headers = {"Accept": $hdr_accept} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id, "Accept": $hdr_accept} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3443,12 +3523,6 @@ export def "get-invoice" [
 #
 # PUT /invoices/{id}
 # operationId: PutInvoice
-# --discounts item shape: {amount?: float, couponId?: any, description?: string, redemptionId?: any}
-# --items item shape: {createdTime?: any, description?: string, periodEndTime?: string, periodNumber?: int, periodStartTime?: string, productId?: any, quantity?: int, type: "debit"|"credit", unitPrice: float, updatedTime?: any}
-# --shipping shape: {calculator: "manual"|"rebilly"}
-# --tax shape: {amount?: int, calculator: "manual"|"rebilly"}
-# --retryInstruction shape: {afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list}
-# --transactions item shape: {3ds?: any, billingAddress?: any, createdTime?: any, customFields?: record, customerId?: any, description?: string, paymentInstrument?: record, processedTime?: any, redirectUrl?: string, requestId?: string, updatedTime?: any, isMerchantInitiated?: bool, isProcessedOutside?: bool, method?: any, notificationUrl?: string, orderId?: string, retryInstruction?: record, riskMetadata?: any, scheduledTime?: string, velocity?: int}
 export def "put-invoice" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3461,37 +3535,37 @@ export def "put-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --abandoned-time: any # Invoice abandoned time.
+  --abandoned-time: string # Invoice abandoned time. (format: date-time)
   --autopay-scheduled-time: string # Invoice autopay scheduled time. (format: date-time)
-  --billing-address: any # Invoice's billing address.
-  --created-time: any # Invoice created time.
-  currency: any
-  --delivery-address: any # Invoice's delivery address.
-  --due-time: any # Invoice due time.
-  --issued-time: any # Invoice issued time.
+  --billing-address: record # Invoice's billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  --created-time: string # Invoice created time. (format: date-time)
+  currency: string # ISO 4217 alphabetic currency code.
+  --delivery-address: record # Invoice's delivery address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  --due-time: string # Invoice due time. (format: date-time)
+  --issued-time: string # Invoice issued time. (format: date-time)
   --notes: string # Notes for the customer which will be displayed on the invoice.
-  --paid-time: any # Invoice paid time.
+  --paid-time: string # Invoice paid time. (format: date-time)
   --po-number: string # Purchase order number which will be displayed on the invoice. (nullable, e.g. PO123456)
   --shipping: record # Invoice shipping. — shape: {calculator: "manual"|"rebilly"}
   --tax: record # Invoice taxes. — shape: {amount?: int, calculator: "manual"|"rebilly"}
-  --updated-time: any # Invoice updated time.
-  --voided-time: any # Invoice voided time.
-  website_id: any # The website ID.
-  customer_id: any # The сustomer's ID.
-  --due-reminder-time: any # Time past due reminder event will be triggered. (nullable)
+  --updated-time: string # Invoice updated time. (format: date-time)
+  --voided-time: string # Invoice voided time. (format: date-time)
+  website_id: string # The website ID.
+  customer_id: string # The сustomer's ID.
+  --due-reminder-time: string # Time past due reminder event will be triggered. (nullable, format: date-time)
   --retry-instruction: record # The invoice retry instruction. — shape: {afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list}
-]: any -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: any -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}") $auth.query)
   let req_body = {"abandonedTime": $abandoned_time, "autopayScheduledTime": $autopay_scheduled_time, "billingAddress": $billing_address, "createdTime": $created_time, "currency": $currency, "deliveryAddress": $delivery_address, "dueTime": $due_time, "issuedTime": $issued_time, "notes": $notes, "paidTime": $paid_time, "poNumber": $po_number, "shipping": $shipping, "tax": $tax, "updatedTime": $updated_time, "voidedTime": $voided_time, "websiteId": $website_id, "customerId": $customer_id, "dueReminderTime": $due_reminder_time, "retryInstruction": $retry_instruction} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -3522,15 +3596,15 @@ export def "post-invoice-abandonment" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: nothing -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/abandon") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3563,18 +3637,18 @@ export def "post-invoice-issuance" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --due-time: string # Invoice due time. Will be set same as `issuedTime` if `null` or omitted. (nullable, format: date-time)
   --issued-time: string # Invoice issued time. Will be issued immediately if `null` or omitted. (nullable, format: date-time)
-]: any -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: any -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/issue") $auth.query)
   let req_body = {"dueTime": $due_time, "issuedTime": $issued_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3594,7 +3668,7 @@ export def "post-invoice-issuance" [
 # GET /invoices/{id}/items
 # operationId: GetInvoiceItemCollection
 export def "get-invoice-item-collection" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3607,14 +3681,17 @@ export def "get-invoice-item-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<_embedded: list<any>, _links: list<any>, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_embedded: list<any>, _links: list<any>, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/items") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3645,28 +3722,28 @@ export def "post-invoice-item" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Invoice item created time.
+  --created-time: string # Invoice item created time. (format: date-time)
   --description: string # Invoice item's description.
   --period-end-time: string # End time. (format: date-time)
   --period-number: int # Invoice item subscription order period number.
   --period-start-time: string # Start time. (format: date-time)
-  --product-id: any # The product's ID.
+  --product-id: string # The product's ID.
   --quantity: int # Invoice item's quantity.
   type: string@type-completer-5 # Invoice item's type.
   unit_price: float # Invoice item's price. (format: double)
-  --updated-time: any # Invoice item updated time.
-]: any -> record<_embedded: list<any>, _links: list<any>, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record> {
+  --updated-time: string # Invoice item updated time. (format: date-time)
+]: any -> oneof<record<_embedded: list<any>, _links: list<any>, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/items") $auth.query)
   let req_body = {"createdTime": $created_time, "description": $description, "periodEndTime": $period_end_time, "periodNumber": $period_number, "periodStartTime": $period_start_time, "productId": $product_id, "quantity": $quantity, "type": $type, "unitPrice": $unit_price, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3697,15 +3774,15 @@ export def "post-invoice-recalculation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: nothing -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/recalculate") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3737,18 +3814,18 @@ export def "post-invoice-reissuance" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --due-time: string # Invoice due time. Will be set as current date-time if `null` or omitted. (nullable, format: date-time)
-]: any -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: any -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/reissue") $auth.query)
   let req_body = {"dueTime": $due_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3768,7 +3845,7 @@ export def "post-invoice-reissuance" [
 # GET /invoices/{id}/timeline
 # operationId: GetInvoiceTimelineCollection
 export def "get-invoice-timeline-collection" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3781,20 +3858,23 @@ export def "get-invoice-timeline-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --q: string # The partial search of the text fields.
-]: nothing -> table<_links: list<record>, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/timeline") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3809,8 +3889,6 @@ export def "get-invoice-timeline-collection" [
 #
 # POST /invoices/{id}/timeline
 # operationId: PostInvoiceTimeline
-# --_links item shape: {rel: "self", href: string}
-# --extraData shape: {actions?: list, author?: record, links?: list, mentions?: record, tables?: list}
 export def "post-invoice-timeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3824,18 +3902,18 @@ export def "post-invoice-timeline" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --message: string # The message that describes the message details.
-]: any -> record<_links: table<rel: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/timeline") $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3874,9 +3952,9 @@ export def "delete-invoice-timeline" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/invoices/{id}/timeline/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -3908,16 +3986,16 @@ export def "get-invoice-timeline" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/invoices/{id}/timeline/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -3950,18 +4028,18 @@ export def "post-invoice-transaction" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --amount: float # Amount which needs to be applied to the invoice. Can't be more than the transaction's amount. If omitted, the lesser of the transaction's unused amount or the invoice's amount due will be used. (format: double)
   transaction_id: string # Transaction to be applied to the invoice.
-]: any -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: any -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/transaction") $auth.query)
   let req_body = {"amount": $amount, "transactionId": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -3981,7 +4059,7 @@ export def "post-invoice-transaction" [
 # GET /invoices/{id}/transaction-allocations
 # operationId: GetInvoiceTransactionAllocationCollection
 export def "get-invoice-transaction-allocation-collection" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3993,14 +4071,17 @@ export def "get-invoice-transaction-allocation-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
-]: nothing -> table<_links: list<any>, amount: float, currency: record, invoiceId: string, transactionId: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<any>, amount: float, currency: string, invoiceId: string, transactionId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/transaction-allocations") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4031,15 +4112,15 @@ export def "post-invoice-void" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: nothing -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/invoices/{id}/void") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4071,18 +4152,21 @@ export def "get-kyc-document-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> list<any> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/kyc-documents" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4098,6 +4182,7 @@ export def "get-kyc-document-collection" [
 # POST /kyc-documents
 # Discriminator (request): documentType = address-proof, funds-proof, identity-proof, purchase-proof
 # operationId: PostKycDocument
+@deprecated --flag file-id
 export def "post-kyc-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4109,18 +4194,29 @@ export def "post-kyc-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --body: record
+  --created-time: string # Creation date/time. (format: date-time)
+  --document-subtype: string@document-subtype-completer # Document subtype submitted for validation.
+  document_type: string@document-type-completer # Document type submitted for validation, only identity-proof type is analyzed in an automated manner.
+  --file-id: string # Linked file object id. (DEPRECATED)
+  --file-ids: list # Linked file object id's.
+  --processed-time: string # Processing date/time. (format: date-time)
+  --updated-time: string # Latest update date/time. (format: date-time)
+  customer_id: string # The сustomer's ID.
+  --match-level: int # The level of strictness for the document matches. (e.g. 2)
+  --notes: string # Reviewer notes. (nullable)
+  --reason: string # Reason for uploading.
+  --review-time: string # Date and time of manual review. (nullable, format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kyc-documents" $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"createdTime": $created_time, "documentSubtype": $document_subtype, "documentType": $document_type, "fileId": $file_id, "fileIds": $file_ids, "processedTime": $processed_time, "updatedTime": $updated_time, "customerId": $customer_id, "matchLevel": $match_level, "notes": $notes, "reason": $reason, "reviewTime": $review_time} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4158,9 +4254,9 @@ export def "get-kyc-document" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-documents/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4180,6 +4276,7 @@ export def "get-kyc-document" [
 # PUT /kyc-documents/{id}
 # Discriminator (request): documentType = address-proof, funds-proof, identity-proof, purchase-proof
 # operationId: PutKycDocument
+@deprecated --flag file-id
 export def "put-kyc-document" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4192,19 +4289,30 @@ export def "put-kyc-document" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --body: record
+  --created-time: string # Creation date/time. (format: date-time)
+  --document-subtype: string@document-subtype-completer # Document subtype submitted for validation.
+  document_type: string@document-type-completer # Document type submitted for validation, only identity-proof type is analyzed in an automated manner.
+  --file-id: string # Linked file object id. (DEPRECATED)
+  --file-ids: list # Linked file object id's.
+  --processed-time: string # Processing date/time. (format: date-time)
+  --updated-time: string # Latest update date/time. (format: date-time)
+  customer_id: string # The сustomer's ID.
+  --match-level: int # The level of strictness for the document matches. (e.g. 2)
+  --notes: string # Reviewer notes. (nullable)
+  --reason: string # Reason for uploading.
+  --review-time: string # Date and time of manual review. (nullable, format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-documents/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"createdTime": $created_time, "documentSubtype": $document_subtype, "documentType": $document_type, "fileId": $file_id, "fileIds": $file_ids, "processedTime": $processed_time, "updatedTime": $updated_time, "customerId": $customer_id, "matchLevel": $match_level, "notes": $notes, "reason": $reason, "reviewTime": $review_time} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -4242,9 +4350,9 @@ export def "post-kyc-document-acceptance" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-documents/{id}/acceptance") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4299,11 +4407,11 @@ export def "post-kyc-document-matches" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-documents/{id}/matches") $auth.query)
   let req_body = {"containsImage": $contains_image, "dateOfBirth": $date_of_birth, "expiryDate": $expiry_date, "firstName": $first_name, "isIdentityDocument": $is_identity_document, "isPublishedOnline": $is_published_online, "issueDate": $issue_date, "lastName": $last_name, "nationality": $nationality, "city": $city, "date": $date, "line1": $line1, "phone": $phone, "postalCode": $postal_code, "region": $region, "uniqueWords": $unique_words, "wordCount": $word_count} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4344,11 +4452,11 @@ export def "post-kyc-document-rejection" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-documents/{id}/rejection") $auth.query)
   let req_body = {"message": $message, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4386,9 +4494,9 @@ export def "post-kyc-document-review" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-documents/{id}/review") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4420,18 +4528,21 @@ export def "get-kyc-request-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<createdTime: record, documents: list<record>, expirationTime: string, id: record, redirectUrl: string, updatedTime: record, _links: list<any>, customerId: record, matchLevel: int, reason: string> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<createdTime: string, documents: list<record>, expirationTime: string, id: string, redirectUrl: string, updatedTime: string, _links: list<any>, customerId: string, matchLevel: int, reason: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/kyc-requests" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4446,7 +4557,6 @@ export def "get-kyc-request-collection" [
 #
 # POST /kyc-requests
 # operationId: PostKycRequest
-# --documents item shape: {maxAttempts?: int, subtypes?: list<string>, type: any}
 export def "post-kyc-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4458,25 +4568,25 @@ export def "post-kyc-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Creation date/time.
-  documents: list # Documents to be requested from customer. — item shape: {maxAttempts?: int, subtypes?: list<string>, type: any}
+  --created-time: string # Creation date/time. (format: date-time)
+  documents: list # Documents to be requested from customer. — item shape: {maxAttempts?: int, subtypes?: list<string>, type: "identity-proof"|"address-proof"|"funds-proof"|"purchase-proof"}
   --expiration-time: string # Expiration date/time. (format: date-time)
   --redirect-url: string # The URL to redirect the customer when an upload is completed. (format: uri)
-  --updated-time: any # Latest update date/time.
-  customer_id: any # The сustomer's ID.
+  --updated-time: string # Latest update date/time. (format: date-time)
+  customer_id: string # The сustomer's ID.
   --match-level: int # The level of strictness for the document matches. (e.g. 2)
   --reason: string # Reason for uploading.
-]: any -> record<createdTime: record, documents: table<maxAttempts: int, subtypes: list, type: record>, expirationTime: string, id: record, redirectUrl: string, updatedTime: record, _links: list<any>, customerId: record, matchLevel: int, reason: string> {
+]: any -> oneof<record<createdTime: string, documents: table<maxAttempts: int, subtypes: list, type: string>, expirationTime: string, id: string, redirectUrl: string, updatedTime: string, _links: list<any>, customerId: string, matchLevel: int, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/kyc-requests" $auth.query)
   let req_body = {"createdTime": $created_time, "documents": $documents, "expirationTime": $expiration_time, "redirectUrl": $redirect_url, "updatedTime": $updated_time, "customerId": $customer_id, "matchLevel": $match_level, "reason": $reason} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4513,9 +4623,9 @@ export def "delete-kyc-request" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-requests/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4546,15 +4656,15 @@ export def "get-kyc-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<createdTime: record, documents: table<maxAttempts: int, subtypes: list, type: record>, expirationTime: string, id: record, redirectUrl: string, updatedTime: record, _links: list<any>, customerId: record, matchLevel: int, reason: string> {
+]: nothing -> oneof<record<createdTime: string, documents: table<maxAttempts: int, subtypes: list, type: string>, expirationTime: string, id: string, redirectUrl: string, updatedTime: string, _links: list<any>, customerId: string, matchLevel: int, reason: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-requests/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4585,19 +4695,26 @@ export def "patch-kyc-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --body: record
-]: any -> record<createdTime: record, documents: table<maxAttempts: int, subtypes: list, type: record>, expirationTime: string, id: record, redirectUrl: string, updatedTime: record, _links: list<any>, customerId: record, matchLevel: int, reason: string> {
+  customer_id: string # The сustomer's ID.
+  --created-time: string # Creation date/time. (format: date-time)
+  documents: list # Documents to be requested from customer. — item shape: {maxAttempts?: int, subtypes?: list<string>, type: "identity-proof"|"address-proof"|"funds-proof"|"purchase-proof"}
+  --expiration-time: string # Expiration date/time. (format: date-time)
+  --redirect-url: string # The URL to redirect the customer when an upload is completed. (format: uri)
+  --updated-time: string # Latest update date/time. (format: date-time)
+  --match-level: int # The level of strictness for the document matches. (e.g. 2)
+  --reason: string # Reason for uploading.
+]: any -> oneof<record<createdTime: string, documents: table<maxAttempts: int, subtypes: list, type: string>, expirationTime: string, id: string, redirectUrl: string, updatedTime: string, _links: list<any>, customerId: string, matchLevel: int, reason: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/kyc-requests/{id}") $auth.query)
-  let req_body = $body
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"customerId": $customer_id, "createdTime": $created_time, "documents": $documents, "expirationTime": $expiration_time, "redirectUrl": $redirect_url, "updatedTime": $updated_time, "matchLevel": $match_level, "reason": $reason} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -4628,13 +4745,16 @@ export def "get-password-token-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
-]: nothing -> table<_links: list<record>, credentialId: string, expiredTime: string, token: string, username: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, credentialId: string, expiredTime: string, token: string, username: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/password-tokens" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4653,7 +4773,6 @@ export def "get-password-token-collection" [
 #
 # POST /password-tokens
 # operationId: PostPasswordToken
-# --_links item shape: {rel: "self", href: string}
 export def "post-password-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4667,17 +4786,17 @@ export def "post-password-token" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --expired-time: string # Password expired time. (format: date-time)
   username: string # The token's username.
-]: any -> record<_links: table<rel: string>, credentialId: string, expiredTime: string, token: string, username: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, credentialId: string, expiredTime: string, token: string, username: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/password-tokens" $auth.query)
   let req_body = {"expiredTime": $expired_time, "username": $username} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4714,9 +4833,9 @@ export def "delete-password-token" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/password-tokens/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -4747,15 +4866,15 @@ export def "get-password-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, credentialId: string, expiredTime: string, token: string, username: string> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, credentialId: string, expiredTime: string, token: string, username: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/password-tokens/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4787,20 +4906,23 @@ export def "get-payment-card-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, bin: string, brand: record, createdTime: record, customFields: record, customerId: record, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: record, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: record, stickyGatewayAccountId: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, bin: string, brand: string, createdTime: string, customFields: record, customerId: string, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: string, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: string, stickyGatewayAccountId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment-cards" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort, "q": $q, "expand": $expand} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort, "q": $q, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -4815,7 +4937,6 @@ export def "get-payment-card-collection" [
 #
 # POST /payment-cards
 # operationId: PostPaymentCard
-# --riskMetadata shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
 export def "post-payment-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4828,26 +4949,26 @@ export def "post-payment-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  --customer-id: any # The Customer's ID.
-  --body-token: string # PaymentCardToken ID.
-  --billing-address: any # The billing address.
+  customer_id: string # The Customer's ID.
+  --body-token: string # PaymentCardToken ID. (spec name: token)
+  --billing-address: record # The billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
   --cvv: string # Card's cvv (card verification value).
   --exp-month: int # Card's expiration month.
   --exp-year: int # Card's expiration year.
   --method: string@method-completer # The method of payment instrument.
   --pan: string # The card PAN (Primary Account Number).
   --risk-metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
-]: any -> record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: record, createdTime: record, customFields: record, customerId: record, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: record, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: record, stickyGatewayAccountId: string> {
+]: any -> oneof<record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: string, createdTime: string, customFields: record, customerId: string, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: string, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: string, stickyGatewayAccountId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment-cards" $auth.query)
   let req_body = {"customFields": $custom_fields, "customerId": $customer_id, "token": $body_token, "billingAddress": $billing_address, "cvv": $cvv, "expMonth": $exp_month, "expYear": $exp_year, "method": $method, "pan": $pan, "riskMetadata": $risk_metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -4878,15 +4999,15 @@ export def "get-payment-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: record, createdTime: record, customFields: record, customerId: record, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: record, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: record, stickyGatewayAccountId: string> {
+]: nothing -> oneof<record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: string, createdTime: string, customFields: record, customerId: string, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: string, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: string, stickyGatewayAccountId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-cards/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -4917,24 +5038,24 @@ export def "patch-payment-card" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --billing-address: any # The billing address.
+  --billing-address: record # The billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
   --cvv: string # Card's cvv (card verification value).
   --exp-month: int # Card's expiration month.
   --exp-year: int # Card's expiration year.
-  --sticky-gateway-account-id: any # Sticky gateway account ID.
-]: any -> record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: record, createdTime: record, customFields: record, customerId: record, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: record, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: record, stickyGatewayAccountId: string> {
+  --sticky-gateway-account-id: string # Sticky gateway account ID.
+]: any -> oneof<record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: string, createdTime: string, customFields: record, customerId: string, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: string, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: string, stickyGatewayAccountId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-cards/{id}") $auth.query)
   let req_body = {"billingAddress": $billing_address, "customFields": $custom_fields, "cvv": $cvv, "expMonth": $exp_month, "expYear": $exp_year, "stickyGatewayAccountId": $sticky_gateway_account_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -4953,7 +5074,6 @@ export def "patch-payment-card" [
 #
 # PUT /payment-cards/{id}
 # operationId: PutPaymentCard
-# --riskMetadata shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
 export def "put-payment-card" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4967,27 +5087,27 @@ export def "put-payment-card" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  --customer-id: any # The Customer's ID.
-  --body-token: string # PaymentCardToken ID.
-  --billing-address: any # The billing address.
+  customer_id: string # The Customer's ID.
+  --body-token: string # PaymentCardToken ID. (spec name: token)
+  --billing-address: record # The billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
   --cvv: string # Card's cvv (card verification value).
   --exp-month: int # Card's expiration month.
   --exp-year: int # Card's expiration year.
   --method: string@method-completer # The method of payment instrument.
   --pan: string # The card PAN (Primary Account Number).
   --risk-metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
-]: any -> record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: record, createdTime: record, customFields: record, customerId: record, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: record, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: record, stickyGatewayAccountId: string> {
+]: any -> oneof<record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: string, createdTime: string, customFields: record, customerId: string, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: string, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: string, stickyGatewayAccountId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-cards/{id}") $auth.query)
   let req_body = {"customFields": $custom_fields, "customerId": $customer_id, "token": $body_token, "billingAddress": $billing_address, "cvv": $cvv, "expMonth": $exp_month, "expYear": $exp_year, "method": $method, "pan": $pan, "riskMetadata": $risk_metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5018,15 +5138,15 @@ export def "post-payment-card-deactivation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: record, createdTime: record, customFields: record, customerId: record, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: record, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: record, stickyGatewayAccountId: string> {
+]: nothing -> oneof<record<bankCountry: string, bankName: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, bin: string, brand: string, createdTime: string, customFields: record, customerId: string, cvv: string, expMonth: int, expYear: int, fingerprint: string, id: string, last4: string, method: string, pan: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, _embedded: list<any>, _links: list<any>, expirationReminderNumber: int, expirationReminderTime: string, stickyGatewayAccountId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-cards/{id}/deactivation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5056,22 +5176,25 @@ export def "get-payment-instrument-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> list<any> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/payment-instruments" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "sort": $qp_sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
+    query: ({"filter": $filter, "sort": $sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5086,7 +5209,6 @@ export def "get-payment-instrument-collection" [
 #
 # POST /payment-instruments
 # operationId: PostPaymentInstrument
-# --riskMetadata shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
 export def "post-payment-instrument" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5099,26 +5221,28 @@ export def "post-payment-instrument" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  --customer-id: any # The customer's ID.
-  --body-token: string # Payment token ID.
-  --billing-address: any # The billing address.
+  --customer-id: string # The customer's ID.
+  --body-token: string # Payment token ID. (spec name: token)
+  --billing-address: record # The billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
   --cvv: string # Card's cvv (card verification value).
   --exp-month: int # Card's expiration month.
   --exp-year: int # Card's expiration year.
   --method: string@method-completer # The method of payment instrument.
   --pan: string # The card PAN (Primary Account Number).
   --risk-metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
+  --created-time: string # PayPal account created time. (format: date-time)
+  --updated-time: string # PayPal account updated time. (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment-instruments" $auth.query)
-  let req_body = {"customFields": $custom_fields, "customerId": $customer_id, "token": $body_token, "billingAddress": $billing_address, "cvv": $cvv, "expMonth": $exp_month, "expYear": $exp_year, "method": $method, "pan": $pan, "riskMetadata": $risk_metadata} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"customFields": $custom_fields, "customerId": $customer_id, "token": $body_token, "billingAddress": $billing_address, "cvv": $cvv, "expMonth": $exp_month, "expYear": $exp_year, "method": $method, "pan": $pan, "riskMetadata": $risk_metadata, "createdTime": $created_time, "updatedTime": $updated_time} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5155,9 +5279,9 @@ export def "get-payment-instrument" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-instruments/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5188,13 +5312,13 @@ export def "patch-payment-instrument" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --billing-address: any # The billing address (if supplied – overrides billing address from token).
+  --billing-address: record # The billing address (if supplied – overrides billing address from token). — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  --body-token: string # Payment token ID.
+  --body-token: string # Payment token ID. (spec name: token)
   --cvv: string # Card's cvv (card verification value).
   --exp-month: int # Card's expiration month.
   --exp-year: int # Card's expiration year.
-  --sticky-gateway-account-id: any # Sticky gateway account ID.
+  --sticky-gateway-account-id: string # Sticky gateway account ID.
   --account-type: string@account-type-completer # Bank's account type.
   --bank-name: string # Bank's name.
 ]: any -> any {
@@ -5204,11 +5328,11 @@ export def "patch-payment-instrument" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-instruments/{id}") $auth.query)
   let req_body = {"billingAddress": $billing_address, "customFields": $custom_fields, "token": $body_token, "cvv": $cvv, "expMonth": $exp_month, "expYear": $exp_year, "stickyGatewayAccountId": $sticky_gateway_account_id, "accountType": $account_type, "bankName": $bank_name} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -5245,9 +5369,9 @@ export def "post-payment-instrument-deactivation" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/payment-instruments/{id}/deactivation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5266,7 +5390,6 @@ export def "post-payment-instrument-deactivation" [
 #
 # POST /payouts
 # operationId: PostPayout
-# --riskMetadata shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
 @deprecated --flag payment-instrument
 export def "post-payout" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -5280,34 +5403,34 @@ export def "post-payout" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   amount: float # The transaction amount. (format: double, e.g. 97.97)
-  --billing-address: any # Billing address. If not supplied, we use the billing address associated with the payment instrument, and then customer. (nullable)
-  currency: any
+  --billing-address: record # Billing address. If not supplied, we use the billing address associated with the payment instrument, and then customer. (nullable) — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  currency: string # ISO 4217 alphabetic currency code.
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  customer_id: any # The customer identifier string.
+  customer_id: string # The customer identifier string.
   --description: string # The payment description. (nullable)
-  --gateway-account-id: any # Rebilly will select the appropriate payment gateway account for the transaction based on the properties of the transaction and the `gateway-account-requested` event rules configurations. If you wish to prevent Rebilly from making the gateway account selection, you may supply a gateway account id here, and it will be used instead. Only use this field if you intend to override the settings. (nullable)
+  --gateway-account-id: string # Rebilly will select the appropriate payment gateway account for the transaction based on the properties of the transaction and the `gateway-account-requested` event rules configurations. If you wish to prevent Rebilly from making the gateway account selection, you may supply a gateway account id here, and it will be used instead. Only use this field if you intend to override the settings. (nullable)
   --invoice-ids: list<string> # The array of invoice identifiers. (nullable)
   --is-merchant-initiated: oneof<nothing, bool> # True if the transaction was initiated by the merchant. (default: false)
   --is-processed-outside: oneof<nothing, bool> # True if transaction was processed outside Rebilly. (default: false)
   --notification-url: string # The URL where a server-to-server notification request type `POST` with a transaction payload will be sent when the transaction's result is finalized. Do not trust the notification; follow with a `GET` request to confirm the result of the transaction. Please respond with a `2xx` HTTP status code, or we will reattempt the request again. You may use `{id}` or `{result}` as placeholders in the URL and we will replace them with the transaction's id and result accordingly. (nullable, format: uri)
   --payment-instruction: any # Payment instruction. If not supplied, customer's default payment instrument will be used.
-  --payment-instrument: any # DEPRECATED
+  --payment-instrument: record # DEPRECATED
   --processed-time: string # The time the transaction was processed. Can be specified only if transaction was processed outside Rebilly. (format: date-time)
   --redirect-url: string # The URL to redirect the end-user when an offsite transaction is completed. Defaults to the website's configured URL. You may use `{id}` or `{result}` as placeholders in the URL and we will replace them with the transaction's id and result accordingly. (nullable, format: uri)
   --request-id: string # The request id is **recommended**. It prevents duplicate transaction requests within a short period of time. If a duplicate request is sent with the same `requestId` it will be ignored to prevent double-billing anyone. It must be unique within a 24-hour period. We recommend generating a UUID v4 as its value. (nullable, e.g. 44433322-2c4y-483z-a0a9-158621f77a21)
   --risk-metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
-  website_id: any # The website identifier string.
-]: any -> record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list<string>, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, acquirerName: record, arn: string, bin: string, bumpOffer: record<language: record, order: record<amount: float, currency: string>, outcome: string, presentedOffers: record, selectedOffer: record<bumpAmount: record, bumpAmountInUsd: record, customFields: record, offerId: string, offerType: string>, version: record>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: record>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int> {
+  website_id: string # The website identifier string.
+]: any -> oneof<record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list<string>, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, acquirerName: string, arn: string, bin: string, bumpOffer: record<language: string, order: record<amount: float, currency: string>, outcome: string, presentedOffers: list<record>, selectedOffer: record<bumpAmount: float, bumpAmountInUsd: float, customFields: record, offerId: string, offerType: string>, version: string>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: float>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payouts" $auth.query)
   let req_body = {"amount": $amount, "billingAddress": $billing_address, "currency": $currency, "customFields": $custom_fields, "customerId": $customer_id, "description": $description, "gatewayAccountId": $gateway_account_id, "invoiceIds": $invoice_ids, "isMerchantInitiated": $is_merchant_initiated, "isProcessedOutside": $is_processed_outside, "notificationUrl": $notification_url, "paymentInstruction": $payment_instruction, "paymentInstrument": $payment_instrument, "processedTime": $processed_time, "redirectUrl": $redirect_url, "requestId": $request_id, "riskMetadata": $risk_metadata, "websiteId": $website_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5337,22 +5460,25 @@ export def "get-pay-pal-account-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, id: record, method: string, riskMetadata: record<accuracyRadius: int, browserData: record, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, username: string, _embedded: list<any>, _links: list<any>> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, id: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, username: string, _embedded: list<any>, _links: list<any>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/paypal-accounts" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "sort": $qp_sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
+    query: ({"filter": $filter, "sort": $sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5367,7 +5493,6 @@ export def "get-pay-pal-account-collection" [
 #
 # POST /paypal-accounts
 # operationId: PostPayPalAccount
-# --riskMetadata shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
 export def "post-pay-pal-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5379,24 +5504,24 @@ export def "post-pay-pal-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  billing_address: any # The billing address.
-  --created-time: any # PayPal account created time.
+  billing_address: record # The billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  --created-time: string # PayPal account created time. (format: date-time)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  customer_id: any # The customer's ID.
+  customer_id: string # The customer's ID.
   method: string@method-completer-1 # The method of payment instrument.
   --risk-metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
-  --updated-time: any # PayPal account updated time.
-]: any -> record<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, id: record, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, username: string, _embedded: list<any>, _links: list<any>> {
+  --updated-time: string # PayPal account updated time. (format: date-time)
+]: any -> oneof<record<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, id: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, username: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/paypal-accounts" $auth.query)
   let req_body = {"billingAddress": $billing_address, "createdTime": $created_time, "customFields": $custom_fields, "customerId": $customer_id, "method": $method, "riskMetadata": $risk_metadata, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5427,15 +5552,15 @@ export def "get-pay-pal-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, id: record, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, username: string, _embedded: list<any>, _links: list<any>> {
+]: nothing -> oneof<record<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, id: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, username: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/paypal-accounts/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5454,7 +5579,6 @@ export def "get-pay-pal-account" [
 #
 # PUT /paypal-accounts/{id}
 # operationId: PutPayPalAccount
-# --riskMetadata shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
 export def "put-pay-pal-account" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5467,25 +5591,25 @@ export def "put-pay-pal-account" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  billing_address: any # The billing address.
-  --created-time: any # PayPal account created time.
+  billing_address: record # The billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  --created-time: string # PayPal account created time. (format: date-time)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  customer_id: any # The customer's ID.
+  customer_id: string # The customer's ID.
   method: string@method-completer-1 # The method of payment instrument.
   --risk-metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
-  --updated-time: any # PayPal account updated time.
-]: any -> record<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, id: record, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, username: string, _embedded: list<any>, _links: list<any>> {
+  --updated-time: string # PayPal account updated time. (format: date-time)
+]: any -> oneof<record<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, id: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, username: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/paypal-accounts/{id}") $auth.query)
   let req_body = {"billingAddress": $billing_address, "createdTime": $created_time, "customFields": $custom_fields, "customerId": $customer_id, "method": $method, "riskMetadata": $risk_metadata, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5516,15 +5640,15 @@ export def "post-pay-pal-account-deactivation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: record, customFields: record, customerId: record, id: record, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: record, username: string, _embedded: list<any>, _links: list<any>> {
+]: nothing -> oneof<record<billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, createdTime: string, customFields: record, customerId: string, id: string, method: string, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, status: string, updatedTime: string, username: string, _embedded: list<any>, _links: list<any>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/paypal-accounts/{id}/deactivation") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5554,21 +5678,24 @@ export def "get-plan-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The partial search of the text fields.
-]: nothing -> table<createdTime: record, currency: record, currencySign: string, customFields: record, id: record, isTrialOnly: bool, name: string, pricing: record<formula: string>, productId: record, productOptions: record, recurringInterval: record<length: int, unit: string, billingTiming: string, limit: int>, revision: int, setup: record<price: float>, trial: record<period: record, price: float>, updatedTime: record, _links: list<record>, invoiceTimeShift: record<dueTimeShift: record, issueTimeShift: record>> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<createdTime: string, currency: string, currencySign: string, customFields: record, id: string, isTrialOnly: bool, name: string, pricing: record<formula: string>, productId: string, productOptions: record, recurringInterval: record<length: int, unit: string, billingTiming: string, limit: int>, revision: int, setup: record<price: float>, trial: record<period: record, price: float>, updatedTime: string, _links: list<record>, invoiceTimeShift: record<dueTimeShift: record, issueTimeShift: record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/plans" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "sort": $qp_sort, "limit": $limit, "offset": $offset, "q": $q} | compact)
+    query: ({"filter": $filter, "sort": $sort, "limit": $limit, "offset": $offset, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5583,10 +5710,6 @@ export def "get-plan-collection" [
 #
 # POST /plans
 # operationId: PostPlan
-# --pricing shape: {formula: "fixed-fee"|"flat-rate"|"stairstep"|"tiered"|"volume"}
-# --setup shape: {price: float}
-# --trial shape: {period: record, price: float}
-# --_links item shape: {rel: "self", href: string}
 export def "post-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5598,29 +5721,29 @@ export def "post-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Plan created time.
-  currency: any
+  --created-time: string # Plan created time. (format: date-time)
+  currency: string # ISO 4217 alphabetic currency code.
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
   name: string # The plan name, displayed on invoices and receipts.
   pricing: record # shape: {formula: "fixed-fee"|"flat-rate"|"stairstep"|"tiered"|"volume"}
-  product_id: any # The related product ID.
+  product_id: string # The related product ID.
   --product-options: record # Name-value pairs to specify the product options. (e.g. {color: red, size: xxl})
-  --recurring-interval: any # The service interval. For a one-time item, use `null`.
+  --recurring-interval: record # The service interval. For a one-time item, use `null`. — shape: {length: int, unit: "day"|"week"|"month"|"year", billingTiming?: "prepaid"|"postpaid", limit?: int}
   --setup: record # The setup. Set `null` if no setup. — shape: {price: float}
   --trial: record # The trial. Set `null` if no trial. — shape: {period: record, price: float}
-  --updated-time: any # Plan updated time.
-  --invoice-time-shift: any # You can shift issue time and due time of invoices for this plan.
-]: any -> record<createdTime: record, currency: record, currencySign: string, customFields: record, id: record, isTrialOnly: bool, name: string, pricing: record<formula: string>, productId: record, productOptions: record, recurringInterval: record<length: int, unit: string, billingTiming: string, limit: int>, revision: int, setup: record<price: float>, trial: record<period: record<length: int, unit: string>, price: float>, updatedTime: record, _links: table<rel: string>, invoiceTimeShift: record<dueTimeShift: record<duration: int, unit: any>, issueTimeShift: record<chronology: string, duration: int, unit: any>>> {
+  --updated-time: string # Plan updated time. (format: date-time)
+  --invoice-time-shift: record # You can shift issue time and due time of invoices for this plan. — shape: {dueTimeShift?: record, issueTimeShift?: record}
+]: any -> oneof<record<createdTime: string, currency: string, currencySign: string, customFields: record, id: string, isTrialOnly: bool, name: string, pricing: record<formula: string>, productId: string, productOptions: record, recurringInterval: record<length: int, unit: string, billingTiming: string, limit: int>, revision: int, setup: record<price: float>, trial: record<period: record<length: int, unit: string>, price: float>, updatedTime: string, _links: table<rel: string, href: string>, invoiceTimeShift: record<dueTimeShift: record<duration: int, unit: any>, issueTimeShift: record<chronology: string, duration: int, unit: any>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/plans" $auth.query)
   let req_body = {"createdTime": $created_time, "currency": $currency, "customFields": $custom_fields, "name": $name, "pricing": $pricing, "productId": $product_id, "productOptions": $product_options, "recurringInterval": $recurring_interval, "setup": $setup, "trial": $trial, "updatedTime": $updated_time, "invoiceTimeShift": $invoice_time_shift} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5657,9 +5780,9 @@ export def "delete-plan" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/plans/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5690,15 +5813,15 @@ export def "get-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<createdTime: record, currency: record, currencySign: string, customFields: record, id: record, isTrialOnly: bool, name: string, pricing: record<formula: string>, productId: record, productOptions: record, recurringInterval: record<length: int, unit: string, billingTiming: string, limit: int>, revision: int, setup: record<price: float>, trial: record<period: record<length: int, unit: string>, price: float>, updatedTime: record, _links: table<rel: string>, invoiceTimeShift: record<dueTimeShift: record<duration: int, unit: any>, issueTimeShift: record<chronology: string, duration: int, unit: any>>> {
+]: nothing -> oneof<record<createdTime: string, currency: string, currencySign: string, customFields: record, id: string, isTrialOnly: bool, name: string, pricing: record<formula: string>, productId: string, productOptions: record, recurringInterval: record<length: int, unit: string, billingTiming: string, limit: int>, revision: int, setup: record<price: float>, trial: record<period: record<length: int, unit: string>, price: float>, updatedTime: string, _links: table<rel: string, href: string>, invoiceTimeShift: record<dueTimeShift: record<duration: int, unit: any>, issueTimeShift: record<chronology: string, duration: int, unit: any>>>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/plans/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5717,10 +5840,6 @@ export def "get-plan" [
 #
 # PUT /plans/{id}
 # operationId: PutPlan
-# --pricing shape: {formula: "fixed-fee"|"flat-rate"|"stairstep"|"tiered"|"volume"}
-# --setup shape: {price: float}
-# --trial shape: {period: record, price: float}
-# --_links item shape: {rel: "self", href: string}
 export def "put-plan" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5733,30 +5852,30 @@ export def "put-plan" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # Plan created time.
-  currency: any
+  --created-time: string # Plan created time. (format: date-time)
+  currency: string # ISO 4217 alphabetic currency code.
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
   name: string # The plan name, displayed on invoices and receipts.
   pricing: record # shape: {formula: "fixed-fee"|"flat-rate"|"stairstep"|"tiered"|"volume"}
-  product_id: any # The related product ID.
+  product_id: string # The related product ID.
   --product-options: record # Name-value pairs to specify the product options. (e.g. {color: red, size: xxl})
-  --recurring-interval: any # The service interval. For a one-time item, use `null`.
+  --recurring-interval: record # The service interval. For a one-time item, use `null`. — shape: {length: int, unit: "day"|"week"|"month"|"year", billingTiming?: "prepaid"|"postpaid", limit?: int}
   --setup: record # The setup. Set `null` if no setup. — shape: {price: float}
   --trial: record # The trial. Set `null` if no trial. — shape: {period: record, price: float}
-  --updated-time: any # Plan updated time.
-  --invoice-time-shift: any # You can shift issue time and due time of invoices for this plan.
-]: any -> record<createdTime: record, currency: record, currencySign: string, customFields: record, id: record, isTrialOnly: bool, name: string, pricing: record<formula: string>, productId: record, productOptions: record, recurringInterval: record<length: int, unit: string, billingTiming: string, limit: int>, revision: int, setup: record<price: float>, trial: record<period: record<length: int, unit: string>, price: float>, updatedTime: record, _links: table<rel: string>, invoiceTimeShift: record<dueTimeShift: record<duration: int, unit: any>, issueTimeShift: record<chronology: string, duration: int, unit: any>>> {
+  --updated-time: string # Plan updated time. (format: date-time)
+  --invoice-time-shift: record # You can shift issue time and due time of invoices for this plan. — shape: {dueTimeShift?: record, issueTimeShift?: record}
+]: any -> oneof<record<createdTime: string, currency: string, currencySign: string, customFields: record, id: string, isTrialOnly: bool, name: string, pricing: record<formula: string>, productId: string, productOptions: record, recurringInterval: record<length: int, unit: string, billingTiming: string, limit: int>, revision: int, setup: record<price: float>, trial: record<period: record<length: int, unit: string>, price: float>, updatedTime: string, _links: table<rel: string, href: string>, invoiceTimeShift: record<dueTimeShift: record<duration: int, unit: any>, issueTimeShift: record<chronology: string, duration: int, unit: any>>>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/plans/{id}") $auth.query)
   let req_body = {"createdTime": $created_time, "currency": $currency, "customFields": $custom_fields, "name": $name, "pricing": $pricing, "productId": $product_id, "productOptions": $product_options, "recurringInterval": $recurring_interval, "setup": $setup, "trial": $trial, "updatedTime": $updated_time, "invoiceTimeShift": $invoice_time_shift} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5786,21 +5905,24 @@ export def "get-product-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The partial search of the text fields.
-]: nothing -> table<createdTime: record, customFields: record, description: string, id: record, name: string, options: list<string>, requiresShipping: bool, unitLabel: string, updatedTime: record, _links: list<record>, accountingCode: string, taxCategoryId: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<createdTime: string, customFields: record, description: string, id: string, name: string, options: list<string>, requiresShipping: bool, unitLabel: string, updatedTime: string, _links: list<record>, accountingCode: string, taxCategoryId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/products" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "sort": $qp_sort, "limit": $limit, "offset": $offset, "q": $q} | compact)
+    query: ({"filter": $filter, "sort": $sort, "limit": $limit, "offset": $offset, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5815,7 +5937,6 @@ export def "get-product-collection" [
 #
 # POST /products
 # operationId: PostProduct
-# --_links item shape: {rel: "self", href: string}
 export def "post-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5827,27 +5948,27 @@ export def "post-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The product created time.
+  --created-time: string # The product created time. (format: date-time)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
   --description: string # The product description.
   name: string # The product name. (e.g. Premium membership)
   --options: list<string> # The product options such as color, size, etc. The product options definition does not include option values. Those are defined within the plans.
   --requires-shipping: oneof<nothing, bool> # If the product requires shipping, shipping calculations will be applied. (e.g. false)
   --unit-label: string # The unit label, such as per `seat` or per `unit`. (default: unit, e.g. seat)
-  --updated-time: any # The product updated time.
+  --updated-time: string # The product updated time. (format: date-time)
   --accounting-code: string # The product accounting code. (e.g. 4010)
   --tax-category-id: string@tax-category-id-completer # The product's tax category identifier string.
-]: any -> record<createdTime: record, customFields: record, description: string, id: record, name: string, options: list<string>, requiresShipping: bool, unitLabel: string, updatedTime: record, _links: table<rel: string>, accountingCode: string, taxCategoryId: string> {
+]: any -> oneof<record<createdTime: string, customFields: record, description: string, id: string, name: string, options: list<string>, requiresShipping: bool, unitLabel: string, updatedTime: string, _links: table<rel: string, href: string>, accountingCode: string, taxCategoryId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/products" $auth.query)
   let req_body = {"createdTime": $created_time, "customFields": $custom_fields, "description": $description, "name": $name, "options": $options, "requiresShipping": $requires_shipping, "unitLabel": $unit_label, "updatedTime": $updated_time, "accountingCode": $accounting_code, "taxCategoryId": $tax_category_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -5884,9 +6005,9 @@ export def "delete-product" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -5917,15 +6038,15 @@ export def "get-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<createdTime: record, customFields: record, description: string, id: record, name: string, options: list<string>, requiresShipping: bool, unitLabel: string, updatedTime: record, _links: table<rel: string>, accountingCode: string, taxCategoryId: string> {
+]: nothing -> oneof<record<createdTime: string, customFields: record, description: string, id: string, name: string, options: list<string>, requiresShipping: bool, unitLabel: string, updatedTime: string, _links: table<rel: string, href: string>, accountingCode: string, taxCategoryId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -5944,7 +6065,6 @@ export def "get-product" [
 #
 # PUT /products/{id}
 # operationId: PutProduct
-# --_links item shape: {rel: "self", href: string}
 export def "put-product" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5957,28 +6077,28 @@ export def "put-product" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The product created time.
+  --created-time: string # The product created time. (format: date-time)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
   --description: string # The product description.
   name: string # The product name. (e.g. Premium membership)
   --options: list<string> # The product options such as color, size, etc. The product options definition does not include option values. Those are defined within the plans.
   --requires-shipping: oneof<nothing, bool> # If the product requires shipping, shipping calculations will be applied. (e.g. false)
   --unit-label: string # The unit label, such as per `seat` or per `unit`. (default: unit, e.g. seat)
-  --updated-time: any # The product updated time.
+  --updated-time: string # The product updated time. (format: date-time)
   --accounting-code: string # The product accounting code. (e.g. 4010)
   --tax-category-id: string@tax-category-id-completer # The product's tax category identifier string.
-]: any -> record<createdTime: record, customFields: record, description: string, id: record, name: string, options: list<string>, requiresShipping: bool, unitLabel: string, updatedTime: record, _links: table<rel: string>, accountingCode: string, taxCategoryId: string> {
+]: any -> oneof<record<createdTime: string, customFields: record, description: string, id: string, name: string, options: list<string>, requiresShipping: bool, unitLabel: string, updatedTime: string, _links: table<rel: string, href: string>, accountingCode: string, taxCategoryId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/products/{id}") $auth.query)
   let req_body = {"createdTime": $created_time, "customFields": $custom_fields, "description": $description, "name": $name, "options": $options, "requiresShipping": $requires_shipping, "unitLabel": $unit_label, "updatedTime": $updated_time, "accountingCode": $accounting_code, "taxCategoryId": $tax_category_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -5997,7 +6117,6 @@ export def "put-product" [
 #
 # POST /ready-to-pay
 # operationId: PostReadyToPay
-# --riskMetadata shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
 export def "post-ready-to-pay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6009,21 +6128,21 @@ export def "post-ready-to-pay" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --customer-id: any # The customer identifier string.
-  --billing-address: any # The billing address.
+  --customer-id: string # The customer identifier string.
+  --billing-address: record # The billing address. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
   risk_metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
-  website_id: any # The website identifier string.
-]: any -> list<any> {
+  website_id: string # The website identifier string.
+]: any -> oneof<list<any>, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ready-to-pay" $auth.query)
   let req_body = {"customerId": $customer_id, "billingAddress": $billing_address, "riskMetadata": $risk_metadata, "websiteId": $website_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6052,21 +6171,24 @@ export def "get-search" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The default search. It will search across resources and many fields.
-]: nothing -> table<customers: list<record>, invoices: list<record>, orders: list<record>, searched: list<string>, transactions: list<record>> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<customers: list<record>, invoices: list<record>, orders: list<record>, searched: list<string>, transactions: list<record>>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sort" $qp_sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sort" $sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sort": $qp_sort, "limit": $limit, "offset": $offset, "q": $q} | compact)
+    query: ({"sort": $sort, "limit": $limit, "offset": $offset, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6094,19 +6216,22 @@ export def "get-shipping-zone-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --q: string # The partial search of the text fields.
-]: nothing -> table<_links: list<record>, countries: list<string>, createdTime: record, id: record, isDefault: any, name: string, rates: list<record>, updatedTime: record> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, countries: list<string>, createdTime: string, id: string, isDefault: any, name: string, rates: list<record>, updatedTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/shipping-zones" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6121,8 +6246,6 @@ export def "get-shipping-zone-collection" [
 #
 # POST /shipping-zones
 # operationId: PostShippingZone
-# --_links item shape: {rel: "self", href: string}
-# --rates item shape: {currency: any, maxOrderSubtotal?: float, minOrderSubtotal?: float, name: string, price: float}
 export def "post-shipping-zone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6135,21 +6258,21 @@ export def "post-shipping-zone" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --countries: list<string> # Countries covered by the shipping zone. A country can only belong to one shipping zone (no overlapping). This property can be empty or null to create a default shipping zone for countries that were not specified in other zones.
-  --created-time: any # The shipping zone created time.
+  --created-time: string # The shipping zone created time. (format: date-time)
   name: string # The shipping zone name.
-  --rates: list # Price-based shipping rate instructions. — item shape: {currency: any, maxOrderSubtotal?: float, minOrderSubtotal?: float, name: string, price: float}
-  --updated-time: any # The shipping zone updated time.
-]: any -> record<_links: table<rel: string>, countries: list<string>, createdTime: record, id: record, isDefault: any, name: string, rates: table<_links: list, currency: record, maxOrderSubtotal: float, minOrderSubtotal: float, name: string, price: float>, updatedTime: record> {
+  --rates: list # Price-based shipping rate instructions. — item shape: {currency: string, maxOrderSubtotal?: float, minOrderSubtotal?: float, name: string, price: float}
+  --updated-time: string # The shipping zone updated time. (format: date-time)
+]: any -> oneof<record<_links: table<rel: string, href: string>, countries: list<string>, createdTime: string, id: string, isDefault: any, name: string, rates: table<_links: list, currency: string, maxOrderSubtotal: float, minOrderSubtotal: float, name: string, price: float>, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shipping-zones" $auth.query)
   let req_body = {"countries": $countries, "createdTime": $created_time, "name": $name, "rates": $rates, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6186,9 +6309,9 @@ export def "delete-shipping-zone" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping-zones/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6219,15 +6342,15 @@ export def "get-shipping-zone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, countries: list<string>, createdTime: record, id: record, isDefault: any, name: string, rates: table<_links: list, currency: record, maxOrderSubtotal: float, minOrderSubtotal: float, name: string, price: float>, updatedTime: record> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, countries: list<string>, createdTime: string, id: string, isDefault: any, name: string, rates: table<_links: list, currency: string, maxOrderSubtotal: float, minOrderSubtotal: float, name: string, price: float>, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping-zones/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6246,8 +6369,6 @@ export def "get-shipping-zone" [
 #
 # PUT /shipping-zones/{id}
 # operationId: PutShippingZone
-# --_links item shape: {rel: "self", href: string}
-# --rates item shape: {currency: any, maxOrderSubtotal?: float, minOrderSubtotal?: float, name: string, price: float}
 export def "put-shipping-zone" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6261,22 +6382,22 @@ export def "put-shipping-zone" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --countries: list<string> # Countries covered by the shipping zone. A country can only belong to one shipping zone (no overlapping). This property can be empty or null to create a default shipping zone for countries that were not specified in other zones.
-  --created-time: any # The shipping zone created time.
+  --created-time: string # The shipping zone created time. (format: date-time)
   name: string # The shipping zone name.
-  --rates: list # Price-based shipping rate instructions. — item shape: {currency: any, maxOrderSubtotal?: float, minOrderSubtotal?: float, name: string, price: float}
-  --updated-time: any # The shipping zone updated time.
-]: any -> record<_links: table<rel: string>, countries: list<string>, createdTime: record, id: record, isDefault: any, name: string, rates: table<_links: list, currency: record, maxOrderSubtotal: float, minOrderSubtotal: float, name: string, price: float>, updatedTime: record> {
+  --rates: list # Price-based shipping rate instructions. — item shape: {currency: string, maxOrderSubtotal?: float, minOrderSubtotal?: float, name: string, price: float}
+  --updated-time: string # The shipping zone updated time. (format: date-time)
+]: any -> oneof<record<_links: table<rel: string, href: string>, countries: list<string>, createdTime: string, id: string, isDefault: any, name: string, rates: table<_links: list, currency: string, maxOrderSubtotal: float, minOrderSubtotal: float, name: string, price: float>, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/shipping-zones/{id}") $auth.query)
   let req_body = {"countries": $countries, "createdTime": $created_time, "name": $name, "rates": $rates, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6308,18 +6429,21 @@ export def "get-subscription-cancellation-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<_links: list<record>, appliedInvoiceId: record, canceledBy: string, canceledTime: string, churnTime: string, createdTime: record, description: string, id: record, lineItemSubtotal: float, lineItems: record, prorated: bool, proratedInvoiceId: record, reason: string, status: string, subscriptionId: record> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, appliedInvoiceId: string, canceledBy: string, canceledTime: string, churnTime: string, createdTime: string, description: string, id: string, lineItemSubtotal: float, lineItems: list<record>, prorated: bool, proratedInvoiceId: string, reason: string, status: string, subscriptionId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/subscription-cancellations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6334,7 +6458,6 @@ export def "get-subscription-cancellation-collection" [
 #
 # POST /subscription-cancellations
 # operationId: PostSubscriptionCancellation
-# --_links item shape: {rel: "self", href: string}
 export def "post-subscription-cancellation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6348,24 +6471,24 @@ export def "post-subscription-cancellation" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --canceled-by: string@canceled-by-completer # Who did the cancellation. (default: customer)
   churn_time: string # The time when the subscription will be deactivated. (format: date-time)
-  --created-time: any # The time of resource creation (when it is posted).
+  --created-time: string # The time of resource creation (when it is posted). (format: date-time)
   --description: string # Cancel reason description in free form.
-  --line-items: any # Items to be added to the new invoice. Proration item is generated and added automatically.
+  --line-items: list # Items to be added to the new invoice. Proration item is generated and added automatically. — item shape: {createdTime?: string, description?: string, periodEndTime?: string, periodStartTime?: string, quantity: int, type: "debit"|"credit", unitPriceAmount: float, unitPriceCurrency: string}
   --prorated: oneof<nothing, bool> # Defines if the customer gets a pro-rata credit for the time remaining between `churnTime` and subscription's next renewal time. (default: false)
   --reason: string@reason-completer # Cancellation reason. (default: other)
   --status: string@status-completer-1 # "draft" defines that the cancellation isn't applied on an invoice and subscription but can be inspected to see the charge. "confirmed" will set a subscription to be canceled when the `churnTime` is reached. "completed" is a read-only status which is set by the system when the churnTime is reached. The cancellation may not be changed or deleted when the status is "completed". (default: confirmed)
-  subscription_id: any # Identifier of the canceled subscription order.
-]: any -> record<_links: table<rel: string>, appliedInvoiceId: record, canceledBy: string, canceledTime: string, churnTime: string, createdTime: record, description: string, id: record, lineItemSubtotal: float, lineItems: record, prorated: bool, proratedInvoiceId: record, reason: string, status: string, subscriptionId: record> {
+  subscription_id: string # Identifier of the canceled subscription order.
+]: any -> oneof<record<_links: table<rel: string, href: string>, appliedInvoiceId: string, canceledBy: string, canceledTime: string, churnTime: string, createdTime: string, description: string, id: string, lineItemSubtotal: float, lineItems: table<createdTime: string, description: string, periodEndTime: string, periodStartTime: string, quantity: int, type: string, unitPriceAmount: float, unitPriceCurrency: string>, prorated: bool, proratedInvoiceId: string, reason: string, status: string, subscriptionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscription-cancellations" $auth.query)
   let req_body = {"canceledBy": $canceled_by, "churnTime": $churn_time, "createdTime": $created_time, "description": $description, "lineItems": $line_items, "prorated": $prorated, "reason": $reason, "status": $status, "subscriptionId": $subscription_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6402,9 +6525,9 @@ export def "delete-subscription-cancellation" [
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscription-cancellations/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -6435,15 +6558,15 @@ export def "get-subscription-cancellation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, appliedInvoiceId: record, canceledBy: string, canceledTime: string, churnTime: string, createdTime: record, description: string, id: record, lineItemSubtotal: float, lineItems: record, prorated: bool, proratedInvoiceId: record, reason: string, status: string, subscriptionId: record> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, appliedInvoiceId: string, canceledBy: string, canceledTime: string, churnTime: string, createdTime: string, description: string, id: string, lineItemSubtotal: float, lineItems: table<createdTime: string, description: string, periodEndTime: string, periodStartTime: string, quantity: int, type: string, unitPriceAmount: float, unitPriceCurrency: string>, prorated: bool, proratedInvoiceId: string, reason: string, status: string, subscriptionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscription-cancellations/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6462,7 +6585,6 @@ export def "get-subscription-cancellation" [
 #
 # PUT /subscription-cancellations/{id}
 # operationId: PutSubscriptionCancellation
-# --_links item shape: {rel: "self", href: string}
 export def "put-subscription-cancellation" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6477,25 +6599,25 @@ export def "put-subscription-cancellation" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --canceled-by: string@canceled-by-completer # Who did the cancellation. (default: customer)
   churn_time: string # The time when the subscription will be deactivated. (format: date-time)
-  --created-time: any # The time of resource creation (when it is posted).
+  --created-time: string # The time of resource creation (when it is posted). (format: date-time)
   --description: string # Cancel reason description in free form.
-  --line-items: any # Items to be added to the new invoice. Proration item is generated and added automatically.
+  --line-items: list # Items to be added to the new invoice. Proration item is generated and added automatically. — item shape: {createdTime?: string, description?: string, periodEndTime?: string, periodStartTime?: string, quantity: int, type: "debit"|"credit", unitPriceAmount: float, unitPriceCurrency: string}
   --prorated: oneof<nothing, bool> # Defines if the customer gets a pro-rata credit for the time remaining between `churnTime` and subscription's next renewal time. (default: false)
   --reason: string@reason-completer # Cancellation reason. (default: other)
   --status: string@status-completer-1 # "draft" defines that the cancellation isn't applied on an invoice and subscription but can be inspected to see the charge. "confirmed" will set a subscription to be canceled when the `churnTime` is reached. "completed" is a read-only status which is set by the system when the churnTime is reached. The cancellation may not be changed or deleted when the status is "completed". (default: confirmed)
-  subscription_id: any # Identifier of the canceled subscription order.
-]: any -> record<_links: table<rel: string>, appliedInvoiceId: record, canceledBy: string, canceledTime: string, churnTime: string, createdTime: record, description: string, id: record, lineItemSubtotal: float, lineItems: record, prorated: bool, proratedInvoiceId: record, reason: string, status: string, subscriptionId: record> {
+  subscription_id: string # Identifier of the canceled subscription order.
+]: any -> oneof<record<_links: table<rel: string, href: string>, appliedInvoiceId: string, canceledBy: string, canceledTime: string, churnTime: string, createdTime: string, description: string, id: string, lineItemSubtotal: float, lineItems: table<createdTime: string, description: string, periodEndTime: string, periodStartTime: string, quantity: int, type: string, unitPriceAmount: float, unitPriceCurrency: string>, prorated: bool, proratedInvoiceId: string, reason: string, status: string, subscriptionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscription-cancellations/{id}") $auth.query)
   let req_body = {"canceledBy": $canceled_by, "churnTime": $churn_time, "createdTime": $created_time, "description": $description, "lineItems": $line_items, "prorated": $prorated, "reason": $reason, "status": $status, "subscriptionId": $subscription_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6527,18 +6649,21 @@ export def "get-subscription-reactivation-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<_links: list<record>, cancellationId: record, createdTime: string, description: string, effectiveTime: string, id: record, renewalTime: string, subscriptionId: record> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, cancellationId: string, createdTime: string, description: string, effectiveTime: string, id: string, renewalTime: string, subscriptionId: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/subscription-reactivations" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6553,7 +6678,6 @@ export def "get-subscription-reactivation-collection" [
 #
 # POST /subscription-reactivations
 # operationId: PostSubscriptionReactivation
-# --_links item shape: {rel: "self", href: string}
 export def "post-subscription-reactivation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6568,18 +6692,18 @@ export def "post-subscription-reactivation" [
   --description: string # Reactivation reason description in free form.
   --effective-time: string # The date from which the service period would start, unless the subscription is canceled but still active. In case the susbcription is still active, the subscription will continue the current service period. If omitted, it will default to the current time. (format: date-time)
   --renewal-time: string # The time of the next subscription renewal. If omitted then it is computed from the effective time. If the subscription is canceled but active it is ignored, so the next renewal will happen as scheduled. (format: date-time)
-  subscription_id: any # Identifier of the reactivated subscription.
-]: any -> record<_links: table<rel: string>, cancellationId: record, createdTime: string, description: string, effectiveTime: string, id: record, renewalTime: string, subscriptionId: record> {
+  subscription_id: string # Identifier of the reactivated subscription.
+]: any -> oneof<record<_links: table<rel: string, href: string>, cancellationId: string, createdTime: string, description: string, effectiveTime: string, id: string, renewalTime: string, subscriptionId: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscription-reactivations" $auth.query)
   let req_body = {"description": $description, "effectiveTime": $effective_time, "renewalTime": $renewal_time, "subscriptionId": $subscription_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6610,15 +6734,15 @@ export def "get-subscription-reactivation" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, cancellationId: record, createdTime: string, description: string, effectiveTime: string, id: record, renewalTime: string, subscriptionId: record> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, cancellationId: string, createdTime: string, description: string, effectiveTime: string, id: string, renewalTime: string, subscriptionId: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscription-reactivations/{id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6648,22 +6772,25 @@ export def "get-subscription-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --q: string # The partial search of the text fields.
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. To expand multiple objects, it accepts a comma-separated list of objects (example: `expand=recentInvoice,initialInvoice`). Available arguments are: - recentInvoice - initialInvoice - customer - website See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<orderType: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<orderType: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"filter": $filter, "sort": $qp_sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
+    query: ({"filter": $filter, "sort": $sort, "limit": $limit, "offset": $offset, "q": $q, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6690,17 +6817,20 @@ export def "post-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. To expand multiple objects, it accepts a comma-separated list of objects (example: `expand=recentInvoice,initialInvoice`). Available arguments are: - recentInvoice - initialInvoice - customer - website See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   order_type: string@order-type-completer # Specifies the type of order, a subscription or a one-time purchase.
-]: any -> record<orderType: string> {
+]: any -> oneof<record<orderType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp $auth.query)
   let req_body = {"orderType": $order_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6721,7 +6851,7 @@ export def "post-subscription" [
 # Discriminator (response): orderType = one-time-order, subscription-order
 # operationId: GetSubscription
 export def "get-subscription" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6732,14 +6862,17 @@ export def "get-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. To expand multiple objects, it accepts a comma-separated list of objects (example: `expand=recentInvoice,initialInvoice`). Available arguments are: - recentInvoice - initialInvoice - customer - website See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> record<orderType: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<record<orderType: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -6760,7 +6893,7 @@ export def "get-subscription" [
 # Discriminator (request): orderType = one-time-order, subscription-order
 # operationId: PutSubscription
 export def "put-subscription" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6771,8 +6904,9 @@ export def "put-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. To expand multiple objects, it accepts a comma-separated list of objects (example: `expand=recentInvoice,initialInvoice`). Available arguments are: - recentInvoice - initialInvoice - customer - website See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   order_type: string@order-type-completer # Specifies the type of order, a subscription or a one-time purchase.
-]: any -> record<orderType: string> {
+]: any -> oneof<record<orderType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -6780,9 +6914,11 @@ export def "put-subscription" [
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}") $qp $auth.query)
   let req_body = {"orderType": $order_type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "put"
     url: $full_url
@@ -6802,7 +6938,6 @@ export def "put-subscription" [
 # POST /subscriptions/{id}/change-items
 # Discriminator (response): orderType = one-time-order, subscription-order
 # operationId: PostSubscriptionItemsChange
-# --items item shape: {plan: any, quantity: int}
 export def "post-subscription-items-change" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6816,23 +6951,24 @@ export def "post-subscription-items-change" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --effective-time: string # The date from which the renewal time (for `reset` operations) and proration calculations are made. If omitted, it will default to the current time. (format: date-time)
-  items: list # item shape: {plan: any, quantity: int}
+  items: list # item shape: {plan: record, quantity: int}
   --keep-trial: oneof<nothing, bool> # If set to true and the subscription order has an active trial, it will use that trial further. Works with 'retain' renewalPolicy only. (default: false)
   --preview: oneof<nothing, bool> # If set to true, it will not change the subscription. It allows for a way to preview the changes that would be made to a subscription. (default: false)
   --prorated: oneof<nothing, bool> # Whether or not to give a pro rata credit for the amount of time remaining between the `effectiveTime` and the end of the current period. In addition, if the `renewalTime` is retained (by setting the `renewalPolicy` to `retain`), then a pro rata debit will occur as well, for the amount between the `effectiveTime` and the `renewalTime` as a percentage of the normal period size.
   renewal_policy: string@renewal-policy-completer # The value determines whether the subscription retains its current `renewalTime` or resets it to a newly calculated `renewalTime`.
-]: any -> record<orderType: string> {
+]: any -> oneof<record<orderType: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/change-items") $auth.query)
   let req_body = {"effectiveTime": $effective_time, "items": $items, "keepTrial": $keep_trial, "preview": $preview, "prorated": $prorated, "renewalPolicy": $renewal_policy} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
+  if (($req_body | get -o "prorated") == null) { error make --unspanned { msg: "required body field 'prorated' missing: pass --prorated or pipe a record" } }
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6863,19 +6999,19 @@ export def "post-subscription-interim-invoice" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --transaction-id: any # If present, applies a payment to the invoice created. If the payment is for the invoice total, it would be marked as paid.
-]: any -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+  --transaction-id: string # If present, applies a payment to the invoice created. If the payment is for the invoice total, it would be marked as paid.
+]: any -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/interim-invoice") $auth.query)
   let req_body = {"transactionId": $transaction_id} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -6895,7 +7031,7 @@ export def "post-subscription-interim-invoice" [
 # GET /subscriptions/{id}/timeline
 # operationId: GetSubscriptionTimelineCollection
 export def "get-subscription-timeline-collection" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6908,20 +7044,23 @@ export def "get-subscription-timeline-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --q: string # The partial search of the text fields.
-]: nothing -> table<_links: list<record>, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "q" $q "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/timeline") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $qp_sort, "q": $q} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "sort": $sort, "q": $q} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -6936,8 +7075,6 @@ export def "get-subscription-timeline-collection" [
 #
 # POST /subscriptions/{id}/timeline
 # operationId: PostSubscriptionTimeline
-# --_links item shape: {rel: "self", href: string}
-# --extraData shape: {actions?: list, author?: record, links?: list, mentions?: record, tables?: list}
 export def "post-subscription-timeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6951,18 +7088,18 @@ export def "post-subscription-timeline" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --message: string # The message that describes the message details.
-]: any -> record<_links: table<rel: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/timeline") $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7001,9 +7138,9 @@ export def "delete-subscription-timeline" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/subscriptions/{id}/timeline/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7035,16 +7172,16 @@ export def "get-subscription-timeline" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/subscriptions/{id}/timeline/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7064,7 +7201,7 @@ export def "get-subscription-timeline" [
 # GET /subscriptions/{id}/upcoming-invoices
 # operationId: GetSubscriptionUpcomingInvoiceCollection
 export def "get-subscription-upcoming-invoice-collection" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7075,14 +7212,17 @@ export def "get-subscription-upcoming-invoice-collection" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, discountAmount: float, discounts: list<record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: list<record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list, afterRetryEndPolicies: list, attempts: list>, revision: int, transactions: list<record>, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, discountAmount: float, discounts: list<record>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: list<record>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list, afterRetryEndPolicies: list, attempts: list>, revision: int, transactions: list<record>, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/upcoming-invoices") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7116,7 +7256,7 @@ export def "post-upcoming-invoice-issuance" [
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --due-time: string # Invoice due time. Will be set same as `issuedTime` if `null` or omitted. (nullable, format: date-time)
   --issued-time: string # Invoice issued time. Will be issued immediately if `null` or omitted. (nullable, format: date-time)
-]: any -> record<abandonedTime: record, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: record, currency: record, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: record, description: string, redemptionId: record>, dueTime: record, id: record, invoiceNumber: int, issuedTime: record, items: table<_embedded: list, _links: list, createdTime: record, description: string, discountAmount: float, id: record, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: record, quantity: int, type: string, unitPrice: float, updatedTime: record>, notes: string, paidTime: record, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: record, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: record, voidedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, customerId: record, dueReminderNumber: int, dueReminderTime: record, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: record, websiteId: record, _embedded: list, _links: list, acquirerName: record, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string> {
+]: any -> oneof<record<abandonedTime: string, amount: float, amountDue: float, autopayRetryNumber: int, autopayScheduledTime: string, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, collectionPeriod: int, createdTime: string, currency: string, delinquentCollectionPeriod: int, deliveryAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, discountAmount: float, discounts: table<amount: float, couponId: string, description: string, redemptionId: string>, dueTime: string, id: string, invoiceNumber: int, issuedTime: string, items: table<_embedded: list, _links: list, createdTime: string, description: string, discountAmount: float, id: string, periodEndTime: string, periodNumber: int, periodStartTime: string, price: float, productId: string, quantity: int, type: string, unitPrice: float, updatedTime: string>, notes: string, paidTime: string, paymentFormUrl: string, poNumber: string, shipping: record<calculator: string>, status: string, subscriptionId: string, subtotalAmount: float, tax: record<amount: int, calculator: string>, updatedTime: string, voidedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, customerId: string, dueReminderNumber: int, dueReminderTime: string, retryInstruction: record<afterAttemptPolicies: list<string>, afterRetryEndPolicies: list<string>, attempts: list<record>>, revision: int, transactions: table<3ds: record, amount: float, billingAddress: record, billingDescriptor: string, childTransactions: list, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list, type: string, updatedTime: string, websiteId: string, _embedded: list, _links: list, acquirerName: string, arn: string, bin: string, bumpOffer: record, dcc: record, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record, revision: int, riskMetadata: record, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -7124,11 +7264,11 @@ export def "post-upcoming-invoice-issuance" [
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), invoice_id: (encode-path-segment $invoice_id)} | format pattern "/subscriptions/{id}/upcoming-invoices/{invoice_id}/issue") $auth.query)
   let req_body = {"dueTime": $due_time, "issuedTime": $issued_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7161,18 +7301,21 @@ export def "get-tag-collection" [
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --q: string # The partial search of the text fields.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
-]: nothing -> table<_links: list<any>, createdTime: record, id: record, name: string, updatedTime: record> {
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<any>, createdTime: string, id: string, name: string, updatedTime: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/tags" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "sort": $qp_sort} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "sort": $sort} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7198,20 +7341,20 @@ export def "post-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The tag's created time.
+  --created-time: string # The tag's created time. (format: date-time)
   name: string # The tag is unique name, which is case-insensitive. (e.g. New)
-  --updated-time: any # The tag's updated time.
-]: any -> record<_links: list<any>, createdTime: record, id: record, name: string, updatedTime: record> {
+  --updated-time: string # The tag's updated time. (format: date-time)
+]: any -> oneof<record<_links: list<any>, createdTime: string, id: string, name: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tags" $auth.query)
   let req_body = {"createdTime": $created_time, "name": $name, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7248,9 +7391,9 @@ export def "delete-tag" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({tag: (encode-path-segment $tag)} | format pattern "/tags/{tag}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7281,15 +7424,15 @@ export def "get-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: list<any>, createdTime: record, id: record, name: string, updatedTime: record> {
+]: nothing -> oneof<record<_links: list<any>, createdTime: string, id: string, name: string, updatedTime: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({tag: (encode-path-segment $tag)} | format pattern "/tags/{tag}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7320,21 +7463,21 @@ export def "patch-tag" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --created-time: any # The tag's created time.
+  --created-time: string # The tag's created time. (format: date-time)
   name: string # The tag is unique name, which is case-insensitive. (e.g. New)
-  --updated-time: any # The tag's updated time.
-]: any -> record<_links: list<any>, createdTime: record, id: record, name: string, updatedTime: record> {
+  --updated-time: string # The tag's updated time. (format: date-time)
+]: any -> oneof<record<_links: list<any>, createdTime: string, id: string, name: string, updatedTime: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({tag: (encode-path-segment $tag)} | format pattern "/tags/{tag}") $auth.query)
   let req_body = {"createdTime": $created_time, "name": $name, "updatedTime": $updated_time} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -7373,11 +7516,11 @@ export def "delete-tag-customer-collection" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({tag: (encode-path-segment $tag)} | format pattern "/tags/{tag}/customers") $auth.query)
   let req_body = {"customerIds": $customer_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7416,11 +7559,11 @@ export def "post-tag-customer-collection" [
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
   let full_url = (build-url $base ({tag: (encode-path-segment $tag)} | format pattern "/tags/{tag}/customers") $auth.query)
   let req_body = {"customerIds": $customer_ids} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7459,9 +7602,9 @@ export def "delete-tag-customer" [
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({tag: (encode-path-segment $tag), customer_id: (encode-path-segment $customer_id)} | format pattern "/tags/{tag}/customers/{customer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -7500,9 +7643,9 @@ export def "post-tag-customer" [
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
   let full_url = (build-url $base ({tag: (encode-path-segment $tag), customer_id: (encode-path-segment $customer_id)} | format pattern "/tags/{tag}/customers/{customer_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7533,13 +7676,16 @@ export def "get-token-collection" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
-]: nothing -> list<any> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<list<any>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tokens" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7558,7 +7704,6 @@ export def "get-token-collection" [
 #
 # POST /tokens
 # operationId: PostToken
-# --paymentInstrument shape: {cvv?: string, expMonth?: int, expYear?: int, pan?: string}
 export def "post-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7570,20 +7715,26 @@ export def "post-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-  --billing-address: any # The billing address object.
-  --method: string@method-completer # The token payment method.
+  --billing-address: record # The billing address object. — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  method: string
   --payment-instrument: record # The payment card instrument details. — shape: {cvv?: string, expMonth?: int, expYear?: int, pan?: string}
+  --created-time: string # Token created time. (format: date-time)
+  --expiration-time: string # Token expiration time. (format: date-time)
+  --lead-source: record # shape: {affiliate?: string, campaign?: string, clickId?: string, content?: string, createdTime?: string, medium?: string, path?: string, referrer?: string, salesAgent?: string, source?: string, subAffiliate?: string, term?: string}
+  --risk-metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
+  --updated-time: string # Token updated time. (format: date-time)
+  --usage-time: string # Token usage time. (format: date-time)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tokens" $auth.query)
-  let req_body = {"billingAddress": $billing_address, "method": $method, "paymentInstrument": $payment_instrument} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = {"billingAddress": $billing_address, "method": $method, "paymentInstrument": $payment_instrument, "createdTime": $created_time, "expirationTime": $expiration_time, "leadSource": $lead_source, "riskMetadata": $risk_metadata, "updatedTime": $updated_time, "usageTime": $usage_time} | compact
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7620,9 +7771,9 @@ export def "get-token" [
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/tokens/{token_arg}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7655,19 +7806,22 @@ export def "get-transaction-collection" [
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
   --q: string # The partial search of the text fields.
-  --qp-sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
+  --sort: list<string> # The collection items sort field and order (prefix with "-" for descending sort).
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> table<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list<string>, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, acquirerName: record, arn: string, bin: string, bumpOffer: record<language: record, order: record, outcome: string, presentedOffers: record, selectedOffer: record, version: record>, dcc: record<base: record, outcome: string, quote: record, usdMarkup: record>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record, cvvResponse: record, response: record>, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list<string>, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, acquirerName: string, arn: string, bin: string, bumpOffer: record<language: string, order: record, outcome: string, presentedOffers: list, selectedOffer: record, version: string>, dcc: record<base: record, outcome: string, quote: record, usdMarkup: float>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record, cvvResponse: record, response: record>, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $sort "csv") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "sort": $qp_sort, "expand": $expand} | compact)
+    query: ({"limit": $limit, "offset": $offset, "filter": $filter, "q": $q, "sort": $sort, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -7682,7 +7836,6 @@ export def "get-transaction-collection" [
 #
 # POST /transactions
 # operationId: PostTransaction
-# --riskMetadata shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
 @deprecated --flag payment-instrument
 export def "post-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -7695,35 +7848,38 @@ export def "post-transaction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   amount: float # The transaction amount. (format: double, e.g. 97.97)
-  --billing-address: any # Billing address. If not supplied, we use the billing address associated with the payment instrument, and then customer. (nullable)
-  currency: any
+  --billing-address: record # Billing address. If not supplied, we use the billing address associated with the payment instrument, and then customer. (nullable) — shape: {address?: string, address2?: string, city?: string, country?: string, emails?: list, firstName?: string, lastName?: string, organization?: string, phoneNumbers?: list, postalCode?: string, region?: string}
+  currency: string # ISO 4217 alphabetic currency code.
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-  customer_id: any # The customer identifier string.
+  customer_id: string # The customer identifier string.
   --description: string # The payment description. (nullable)
-  --gateway-account-id: any # Rebilly will select the appropriate payment gateway account for the transaction based on the properties of the transaction and the `gateway-account-requested` event rules configurations. If you wish to prevent Rebilly from making the gateway account selection, you may supply a gateway account id here, and it will be used instead. Only use this field if you intend to override the settings. (nullable)
+  --gateway-account-id: string # Rebilly will select the appropriate payment gateway account for the transaction based on the properties of the transaction and the `gateway-account-requested` event rules configurations. If you wish to prevent Rebilly from making the gateway account selection, you may supply a gateway account id here, and it will be used instead. Only use this field if you intend to override the settings. (nullable)
   --invoice-ids: list<string> # The array of invoice identifiers. (nullable)
   --is-merchant-initiated: oneof<nothing, bool> # True if the transaction was initiated by the merchant. (default: false)
   --is-processed-outside: oneof<nothing, bool> # True if transaction was processed outside Rebilly. (default: false)
   --notification-url: string # The URL where a server-to-server notification request type `POST` with a transaction payload will be sent when the transaction's result is finalized. Do not trust the notification; follow with a `GET` request to confirm the result of the transaction. Please respond with a `2xx` HTTP status code, or we will reattempt the request again. You may use `{id}` or `{result}` as placeholders in the URL and we will replace them with the transaction's id and result accordingly. (nullable, format: uri)
   --payment-instruction: any # Payment instruction. If not supplied, customer's default payment instrument will be used.
-  --payment-instrument: any # DEPRECATED
+  --payment-instrument: record # DEPRECATED
   --processed-time: string # The time the transaction was processed. Can be specified only if transaction was processed outside Rebilly. (format: date-time)
   --redirect-url: string # The URL to redirect the end-user when an offsite transaction is completed. Defaults to the website's configured URL. You may use `{id}` or `{result}` as placeholders in the URL and we will replace them with the transaction's id and result accordingly. (nullable, format: uri)
   --request-id: string # The request id is **recommended**. It prevents duplicate transaction requests within a short period of time. If a duplicate request is sent with the same `requestId` it will be ignored to prevent double-billing anyone. It must be unique within a 24-hour period. We recommend generating a UUID v4 as its value. (nullable, e.g. 44433322-2c4y-483z-a0a9-158621f77a21)
   --risk-metadata: record # Risk metadata used for 3DS and risk scoring. — shape: {browserData?: record, fingerprint?: string, httpHeaders?: record, ipAddress?: string}
-  website_id: any # The website identifier string.
+  website_id: string # The website identifier string.
   type: string@type-completer-7 # The type of transaction requested. You should always include the type within your API request. This supports a limited subset of Transaction types. To refund or void, use the refund endpoint. To `capture` use the `sale` type. If any existing `authorize` transactions are eligible, then they will be captured and the `sale` will be converted to a `capture` type.
-]: any -> record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list<string>, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, acquirerName: record, arn: string, bin: string, bumpOffer: record<language: record, order: record<amount: float, currency: string>, outcome: string, presentedOffers: record, selectedOffer: record<bumpAmount: record, bumpAmountInUsd: record, customFields: record, offerId: string, offerType: string>, version: record>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: record>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int> {
+]: any -> oneof<record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list<string>, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, acquirerName: string, arn: string, bin: string, bumpOffer: record<language: string, order: record<amount: float, currency: string>, outcome: string, presentedOffers: list<record>, selectedOffer: record<bumpAmount: float, bumpAmountInUsd: float, customFields: record, offerId: string, offerType: string>, version: string>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: float>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transactions" $qp $auth.query)
   let req_body = {"amount": $amount, "billingAddress": $billing_address, "currency": $currency, "customFields": $custom_fields, "customerId": $customer_id, "description": $description, "gatewayAccountId": $gateway_account_id, "invoiceIds": $invoice_ids, "isMerchantInitiated": $is_merchant_initiated, "isProcessedOutside": $is_processed_outside, "notificationUrl": $notification_url, "paymentInstruction": $payment_instruction, "paymentInstrument": $payment_instrument, "processedTime": $processed_time, "redirectUrl": $redirect_url, "requestId": $request_id, "riskMetadata": $risk_metadata, "websiteId": $website_id, "type": $type} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7743,7 +7899,7 @@ export def "post-transaction" [
 # GET /transactions/{id}
 # operationId: GetTransaction
 export def "get-transaction" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7754,14 +7910,17 @@ export def "get-transaction" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --expand: string # Expand a response to get a full related object included inside of the `_embedded` path in the response. It accepts a comma-separated list of objects to expand. See the [expand guide](https://api-reference.rebilly.com/#section/Expand-to-include-embedded-objects) for more info.
-]: nothing -> record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list<string>, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, acquirerName: record, arn: string, bin: string, bumpOffer: record<language: record, order: record<amount: float, currency: string>, outcome: string, presentedOffers: record, selectedOffer: record<bumpAmount: record, bumpAmountInUsd: record, customFields: record, offerId: string, offerType: string>, version: record>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: record>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list<string>, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, acquirerName: string, arn: string, bin: string, bumpOffer: record<language: string, order: record<amount: float, currency: string>, outcome: string, presentedOffers: list<record>, selectedOffer: record<bumpAmount: float, bumpAmountInUsd: float, customFields: record, offerId: string, offerType: string>, version: string>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: float>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7793,18 +7952,18 @@ export def "patch-transaction" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --custom-fields: record # Custom Fields list as a map `{"custom field name": "custom field value", ...}`. The format must follow the saved format (see Custom Fields section for the formats). (default: {}, e.g. {foo: bar})
-]: any -> record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list<string>, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, acquirerName: record, arn: string, bin: string, bumpOffer: record<language: record, order: record<amount: float, currency: string>, outcome: string, presentedOffers: record, selectedOffer: record<bumpAmount: record, bumpAmountInUsd: record, customFields: record, offerId: string, offerType: string>, version: record>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: record>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int> {
+]: any -> oneof<record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list<string>, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, acquirerName: string, arn: string, bin: string, bumpOffer: record<language: string, order: record<amount: float, currency: string>, outcome: string, presentedOffers: list<record>, selectedOffer: record<bumpAmount: float, bumpAmountInUsd: float, customFields: record, offerId: string, offerType: string>, version: string>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: float>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}") $auth.query)
   let req_body = {"customFields": $custom_fields} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "patch"
     url: $full_url
@@ -7835,15 +7994,15 @@ export def "post-transaction-query" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<amount: float, currency: record, result: string, status: string> {
+]: nothing -> oneof<record<amount: float, currency: string, result: string, status: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}/query") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7875,18 +8034,18 @@ export def "post-transaction-refund" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   amount: float # Refund amount. (format: double)
-]: any -> record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list<string>, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, acquirerName: record, arn: string, bin: string, bumpOffer: record<language: record, order: record<amount: float, currency: string>, outcome: string, presentedOffers: record, selectedOffer: record<bumpAmount: record, bumpAmountInUsd: record, customFields: record, offerId: string, offerType: string>, version: record>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: record>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int> {
+]: any -> oneof<record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list<string>, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, acquirerName: string, arn: string, bin: string, bumpOffer: record<language: string, order: record<amount: float, currency: string>, outcome: string, presentedOffers: list<record>, selectedOffer: record<bumpAmount: float, bumpAmountInUsd: float, customFields: record, offerId: string, offerType: string>, version: string>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: float>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}/refund") $auth.query)
   let req_body = {"amount": $amount} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -7906,7 +8065,7 @@ export def "post-transaction-refund" [
 # GET /transactions/{id}/timeline
 # operationId: GetTransactionTimelineCollection
 export def "get-transaction-timeline-collection" [
-  id: any
+  id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7919,14 +8078,17 @@ export def "get-transaction-timeline-collection" [
   --limit: int # The collection items limit.
   --offset: int # The collection items offset.
   --filter: string # The collection items filter requires a special format. Use "," for multiple allowed values. Use ";" for multiple fields. See the [filter guide](https://api-reference.rebilly.com/#section/Using-filter-with-collections) for more options and examples about this format.
-]: nothing -> table<_links: list<record>, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+  --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
+]: nothing -> oneof<table<_links: list<record>, extraData: record<actions: list, author: record, links: list, mentions: record, tables: list>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}/timeline") $qp $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
+  let extra_headers = {"Organization-Id": $organization_id} | compact
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -7945,8 +8107,6 @@ export def "get-transaction-timeline-collection" [
 #
 # POST /transactions/{id}/timeline
 # operationId: PostTransactionTimeline
-# --_links item shape: {rel: "self", href: string}
-# --extraData shape: {actions?: list, author?: record, links?: list, mentions?: record, tables?: list}
 export def "post-transaction-timeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7960,18 +8120,18 @@ export def "post-transaction-timeline" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --message: string # The message that describes the message details.
-]: any -> record<_links: table<rel: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+]: any -> oneof<record<_links: table<rel: string, href: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}/timeline") $auth.query)
   let req_body = {"message": $message} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
@@ -8010,9 +8170,9 @@ export def "delete-transaction-timeline" [
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/transactions/{id}/timeline/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "delete"
     url: $full_url
@@ -8044,16 +8204,16 @@ export def "get-transaction-timeline" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> record<_links: table<rel: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: record, message: string, occurredTime: record, triggeredBy: string, type: string> {
+]: nothing -> oneof<record<_links: table<rel: string, href: string>, extraData: record<actions: list<record>, author: record<userFullName: string, userId: string>, links: list<record>, mentions: record, tables: list<record>>, id: string, message: string, occurredTime: string, triggeredBy: string, type: string>, string, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($message_id | is-empty) { error make --unspanned { msg: "path parameter 'messageId' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id), message_id: (encode-path-segment $message_id)} | format pattern "/transactions/{id}/timeline/{message_id}") $auth.query)
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "get"
     url: $full_url
@@ -8085,20 +8245,20 @@ export def "post-transaction-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
   --amount: float # The transaction amount. (format: double)
-  --currency: any # The transaction currency.
+  --currency: string # The transaction currency.
   result: string@result-completer # Transaction result.
-]: any -> record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: record, currency: record, customFields: record, customerId: record, description: string, gatewayName: record, has3ds: bool, hasAmountAdjustment: bool, id: record, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: record, paymentInstrument: record, planIds: list<string>, processedTime: record, purchaseAmount: float, purchaseCurrency: record, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: record, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: record, websiteId: record, _embedded: list<any>, _links: list<any>, acquirerName: record, arn: string, bin: string, bumpOffer: record<language: record, order: record<amount: float, currency: string>, outcome: string, presentedOffers: record, selectedOffer: record<bumpAmount: record, bumpAmountInUsd: record, customFields: record, offerId: string, offerType: string>, version: record>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: record>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: record, gatewayTransactionId: record, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: record, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: record, retriedTransactionId: record, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int> {
+]: any -> oneof<record<3ds: record<authenticated: string, enrolled: string, flow: string, isDowngraded: bool, liability: string, version: string>, amount: float, billingAddress: record<address: string, address2: string, city: string, country: string, emails: list<record>, firstName: string, hash: string, lastName: string, organization: string, phoneNumbers: list<record>, postalCode: string, region: string>, billingDescriptor: string, childTransactions: list<string>, createdTime: string, currency: string, customFields: record, customerId: string, description: string, gatewayName: string, has3ds: bool, hasAmountAdjustment: bool, id: string, invoiceIds: list<string>, isRebill: bool, isRetry: bool, parentTransactionId: string, paymentInstrument: record, planIds: list<string>, processedTime: string, purchaseAmount: float, purchaseCurrency: string, rebillNumber: int, redirectUrl: string, requestAmount: float, requestCurrency: string, requestId: string, result: string, retryNumber: int, status: string, subscriptionIds: list<string>, type: string, updatedTime: string, websiteId: string, _embedded: list<any>, _links: list<any>, acquirerName: string, arn: string, bin: string, bumpOffer: record<language: string, order: record<amount: float, currency: string>, outcome: string, presentedOffers: list<record>, selectedOffer: record<bumpAmount: float, bumpAmountInUsd: float, customFields: record, offerId: string, offerType: string>, version: string>, dcc: record<base: record<amount: float, currency: string>, outcome: string, quote: record<amount: float, currency: string>, usdMarkup: float>, discrepancyTime: string, disputeStatus: string, disputeTime: string, gateway: record<avsResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, cvvResponse: record<code: string, message: string, originalCode: string, originalMessage: string>, response: record<code: string, message: string, originalCode: string, originalMessage: string, type: string>>, gatewayAccountId: string, gatewayTransactionId: string, hadDiscrepancy: bool, hasBumpOffer: bool, hasDcc: bool, isDisputed: bool, isMerchantInitiated: bool, isProcessedOutside: bool, isReconciled: bool, method: string, notificationUrl: string, orderId: string, referenceData: record, reportAmount: float, reportCurrency: string, retriedTransactionId: string, retriesResult: string, retryInstruction: record<afterAttemptPolicy: string, afterRetryEndPolicy: string, attempts: list<record>>, revision: int, riskMetadata: record<accuracyRadius: int, browserData: record<colorDepth: int, isJavaEnabled: bool, language: string, screenHeight: int, screenWidth: int, timeZoneOffset: int>, city: string, country: string, deviceVelocity: int, distance: int, fingerprint: string, hasMismatchedBankCountry: bool, hasMismatchedBillingAddressCountry: bool, hasMismatchedHolderName: bool, hasMismatchedTimeZone: bool, httpHeaders: record, ipAddress: string, isHosting: bool, isProxy: bool, isTor: bool, isVpn: bool, isp: string, latitude: float, longitude: float, paymentInstrumentVelocity: int, postalCode: string, region: string, score: int, timeZone: string, vpnServiceName: string>, riskScore: int, scheduledTime: string, settlementTime: string, velocity: int>, string, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/transactions/{id}/update") $auth.query)
   let req_body = {"amount": $amount, "currency": $currency, "result": $result} | compact
-  let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
+  let req_body = (merge-body-input $input $req_body "record")
   let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  let auth = ($auth | update headers (merge-headers $auth.headers {Accept: $accept_val}))
   let extra_headers = {"Organization-Id": $organization_id} | compact
-  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let auth = ($auth | update headers (merge-headers $auth.headers $extra_headers))
   let req = {
     method: "post"
     url: $full_url
